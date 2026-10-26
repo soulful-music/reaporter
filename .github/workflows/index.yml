@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -14,12 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - name: No global read or write outside the allowlist (luac)
+        run: lua5.4 tests/run.lua test_globals
       - run: lua5.4 tests/run.lua
 
   index:
     needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,4 +38,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           reapack-index --commit --warnings
-          git push
+          # Another push may have landed meanwhile: rebase onto it, once.
+          git push || { git pull --rebase origin main && git push; }
