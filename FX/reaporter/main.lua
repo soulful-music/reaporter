@@ -2,7 +2,8 @@
 -- ReaImGui window. Everything that converts lives in the pure modules.
 local adapters = require("reaporter.adapters")
 local convert = require("reaporter.core.convert")
-local ini = require("reaporter.core.ini")
+local fileio = require("reaporter.fileio")
+local plan = require("reaporter.core.plan")
 local plugin_list = require("reaporter.core.plugin_list")
 local text = require("reaporter.core.text")
 
@@ -32,7 +33,7 @@ local SIDECARS = RESOURCE .. "/MixSurface/fx-presets"
 ---------------------------------------------------------------------------------------
 -- files
 
-local fs = {}
+local function native(path) return SEP == "\\" and path:gsub("/", "\\") or path end
 
 -- REAPER caches folder listings; index -1 drops the cache (measured: without it a file
 -- added after the first listing stays invisible).
@@ -40,6 +41,27 @@ local function fresh(dir)
   reaper.EnumerateFiles(dir, -1)
   reaper.EnumerateSubdirectories(dir, -1)
 end
+
+local function listed_in(dir, name)
+  fresh(dir)
+  local i = 0
+  while true do
+    local f = reaper.EnumerateFiles(dir, i)
+    if not f then return false end
+    if f == name then return true end
+    i = i + 1
+  end
+end
+
+-- A file is there when REAPER says so or its folder lists it: a file that cannot be
+-- read must still count as existing.
+local function exists(path)
+  if reaper.file_exists(path) then return true end
+  local dir, name = path:match("^(.*)/([^/]*)$")
+  return dir ~= nil and listed_in(dir, name)
+end
+
+local fs = fileio.new({ exists = exists, windows = SEP == "\\" })
 
 function fs.list(dir)
   fresh(dir)
@@ -66,51 +88,7 @@ function fs.is_dir(path)
   return reaper.EnumerateFiles(path, 0) ~= nil or reaper.EnumerateSubdirectories(path, 0) ~= nil
 end
 
-function fs.read(path)
-  local f, err = io.open(path, "rb")
-  if not f then return nil, err end
-  local b = f:read("a")
-  f:close()
-  return b
-end
-
-local function native(path) return SEP == "\\" and path:gsub("/", "\\") or path end
-
--- Write bytes to a temp file beside `path`, read them back, then rename over `path`.
--- A failure leaves `path` as it was.
-local function write_atomic(path, bytes)
-  local tmp = path .. ".reaporter-tmp"
-  local f, err = io.open(tmp, "wb")
-  if not f then error("cannot write " .. tmp .. ": " .. tostring(err), 0) end
-  local ok, werr = f:write(bytes)
-  f:close()
-  if not ok or fs.read(tmp) ~= bytes then
-    os.remove(tmp)
-    error("writing " .. tmp .. " failed: " .. tostring(werr or "read-back differs"), 0)
-  end
-  local renamed, rerr = os.rename(tmp, path)
-  if not renamed and SEP == "\\" and reaper.file_exists(path) then
-    -- Windows will not rename over a file; the caller holds a backup of it.
-    os.remove(path)
-    renamed, rerr = os.rename(tmp, path)
-  end
-  if not renamed then
-    os.remove(tmp)
-    error("cannot replace " .. path .. ": " .. tostring(rerr), 0)
-  end
-end
-
-local function backup(ini_name, bytes, stamp)
-  local dir = PRESETS .. "/ReaPorter-backup"
-  reaper.RecursiveCreateDirectory(native(dir), 0)
-  local path = ("%s/%s.%s.ini"):format(dir, ini_name:gsub("%.ini$", ""), stamp)
-  local f, err = io.open(path, "wb")
-  if not f then error("cannot write the backup " .. path .. ": " .. tostring(err), 0) end
-  f:write(bytes)
-  f:close()
-  if fs.read(path) ~= bytes then error("the backup " .. path .. " does not read back", 0) end
-  return path
-end
+function fs.mkdir(dir) reaper.RecursiveCreateDirectory(native(dir), 0) end
 
 ---------------------------------------------------------------------------------------
 -- REAPER
@@ -227,7 +205,7 @@ local function scan_one(p)
     end
   end
   p.named = convert.presets(p, fs)
-  p.counts = convert.dry_run(p.named, fs.read(PRESETS .. "/" .. p.ini_name))
+  p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named)
   if not S.known[p.fx_name] then
     S.known[p.fx_name] = true
     if available(p) and p.counts.new > 0 then S.ticked[p.fx_name] = true end
@@ -258,39 +236,36 @@ local function start_convert()
   S.phase = "converting"
 end
 
--- Write one plugin's merged file (backup first) and its sidecar.
+-- Write one plugin's merged file (backup first) and its sidecar (core/plan.lua).
 local function finish_plugin(p, job)
-  local r = { plugin = p, written = 0, skipped = 0, failed = job.failed }
-  local target = PRESETS .. "/" .. p.ini_name
+  local o = {
+    fs = fs, job = job, found = #p.named, adapter = p.group.adapter, plugin = p, named = p.named,
+    ini_in = PRESETS .. "/" .. p.ini_name, ini_out = PRESETS .. "/" .. p.ini_name,
+    backup_dir = PRESETS .. "/ReaPorter-backup", stamp = S.stamp,
+  }
+  if S.sidecar and S.mixsurface then
+    o.side_in = SIDECARS .. "/" .. p.ini_name .. ".json"
+    o.side_out = o.side_in
+  end
   local ok, err = pcall(function()
-    local pins = p.pins
-    if not pins then
-      local probed = probe_fx(p.listing.fx_name)
-      if not probed then error("REAPER could not load the plugin to read its pin count", 0) end
-      pins = { probed.nin, probed.nout }
-      p.pins = pins
-    end
-    local existing = fs.read(target)
-    local merged, added, skipped = convert.merged(job, existing, p.listing.uid, pins[1], pins[2])
-    r.skipped = (#p.named - #job.named) + #skipped
-    if #added > 0 then
-      reaper.RecursiveCreateDirectory(native(PRESETS), 0)
-      if existing then r.backup = backup(p.ini_name, existing, S.stamp) end
-      write_atomic(target, merged)
-      r.written = #added
-    end
-    if S.sidecar and S.mixsurface then
-      local side_path = SIDECARS .. "/" .. p.ini_name .. ".json"
-      local old = fs.read(side_path)
-      local bytes, stats = convert.sidecar(p.group.adapter, p, p.named, merged, old, fs.read)
-      if bytes ~= old and (old or stats.imported > 0) then
-        reaper.RecursiveCreateDirectory(native(SIDECARS), 0)
-        write_atomic(side_path, bytes)
+    if #job.ok > 0 then
+      local pins = p.pins
+      if not pins then
+        local probed = probe_fx(p.listing.fx_name)
+        if not probed then error("REAPER could not load the plugin to read its pin count", 0) end
+        pins = { probed.nin, probed.nout }
+        p.pins = pins
       end
-      r.sidecar = stats
+      convert.encode(job, p.listing.uid, pins[1], pins[2])
     end
   end)
-  if not ok then r.error = tostring(err) end
+  local r
+  if ok then
+    r = plan.write(o)
+  else
+    r = { written = 0, skipped = #p.named - #job.named, failed = job.failed, error = tostring(err) }
+  end
+  r.plugin = p
   S.results[#S.results + 1] = r
 end
 
@@ -305,26 +280,22 @@ local function convert_tick()
         S.phase = "done"
         return
       end
-      -- Only names the file does not hold yet: the merge would skip the others.
-      local fresh = {}
-      local taken = {}
-      local existing = fs.read(PRESETS .. "/" .. p.ini_name)
-      if existing then
-        local okf, f = pcall(ini.inspect, existing)
-        if okf then taken = f.taken end
+      local ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named)
+      if not ok then
+        S.results[#S.results + 1] = { plugin = p, written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) }
+      else
+        S.current = { plugin = p, job = convert.new_job(p.group.adapter, p, fresh_named) }
       end
-      for _, e in ipairs(p.named) do
-        if not taken[text.lower(e[1])] then fresh[#fresh + 1] = e end
-      end
-      S.current = { plugin = p, job = convert.new_job(p.group.adapter, p, fresh) }
     end
     local c = S.current
-    local before = c.job.next
-    local done = convert.step(c.job, fs.read, more)
-    S.done_count = S.done_count + (c.job.next - before)
-    if done then
-      finish_plugin(c.plugin, c.job)
-      S.current = nil
+    if c then
+      local before = c.job.next
+      local done = convert.step(c.job, fs.read, more)
+      S.done_count = S.done_count + (c.job.next - before)
+      if done then
+        finish_plugin(c.plugin, c.job)
+        S.current = nil
+      end
     end
   end
 end
@@ -484,7 +455,7 @@ local function draw_results()
     local p = r.plugin
     local head = ("%s: %d written, %d skipped, %d failed"):format(plugin_label(p), r.written, r.skipped, #r.failed)
     if r.error then
-      ImGui.TextColored(ctx, RED, plugin_label(p) .. ": not written: " .. r.error)
+      ImGui.TextColored(ctx, RED, plugin_label(p) .. ": preset file not written: " .. r.error)
     elseif #r.failed > 0 then
       if ImGui.TreeNode(ctx, head .. "##" .. p.fx_name) then
         for _, f in ipairs(r.failed) do
@@ -495,11 +466,16 @@ local function draw_results()
     else
       ImGui.TextColored(ctx, r.written > 0 and GREEN or GREY, head)
     end
-    if r.backup then
-      ImGui.Indent(ctx, 18)
-      ImGui.TextDisabled(ctx, "backup: " .. native(r.backup))
-      ImGui.Unindent(ctx, 18)
+    ImGui.Indent(ctx, 18)
+    if r.backup then ImGui.TextDisabled(ctx, "backup: " .. native(r.backup)) end
+    if r.sidecar_error then
+      ImGui.TextColored(ctx, RED, "MixSurface folders and tags: " .. r.sidecar_error)
+    elseif r.sidecar_written then
+      ImGui.TextDisabled(ctx, ("MixSurface folders and tags: written for %d presets"):format(r.sidecar.imported))
+    elseif r.sidecar then
+      ImGui.TextDisabled(ctx, "MixSurface folders and tags: unchanged")
     end
+    ImGui.Unindent(ctx, 18)
   end
   ImGui.Spacing(ctx)
   ImGui.TextWrapped(ctx, "The new presets are in each plugin's REAPER preset list now, "
@@ -588,10 +564,11 @@ local function qa_step()
     end
     for _, r in ipairs(S.results) do
       local sc = r.sidecar
-      f:write(("RESULT\t%s\twritten %d\tskipped %d\tfailed %d\tpins %s\tbackup %s\tsidecar %s\terror %s\n"):format(
+      f:write(("RESULT\t%s\twritten %d\tskipped %d\tfailed %d\tpins %s\tbackup %s\tsidecar %s\terror %s\tsidecar error %s\n"):format(
         r.plugin.fx_name, r.written, r.skipped, #r.failed,
         r.plugin.pins and (r.plugin.pins[1] .. "/" .. r.plugin.pins[2]) or "-", r.backup or "-",
-        sc and ("imported " .. sc.imported .. " folder " .. sc.folder) or "-", r.error or "-"))
+        sc and ((r.sidecar_written and "written" or "unchanged") .. " imported " .. sc.imported .. " folder " .. sc.folder) or "-",
+        r.error or "-", r.sidecar_error or "-"))
       for k = 1, math.min(3, #r.failed) do f:write("  FAIL\t", r.failed[k][1], "\t", r.failed[k][2], "\n") end
     end
     f:write("DONE\n")

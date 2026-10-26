@@ -8,13 +8,18 @@
 -- plugin REAPER lists, into --out: <ini name> (the merge into --presets' file of that
 -- name, or a new file), <ini name>.entries (name TAB path TAB entry hex, one per
 -- converted preset), <ini name>.failed (path TAB reason) and <ini name>.json (the
--- sidecar, merged into --sidecars' file). It never writes anywhere but --out.
+-- sidecar, merged into --sidecars' file). The preset file and the sidecar go through
+-- core/plan.lua as in REAPER: written only when the window would write them, with the
+-- file merged into backed up to --out/ReaPorter-backup first. The sidecar is on when
+-- <resource>/MixSurface exists or --sidecars is given, off with --no-sidecar. It never
+-- writes anywhere but --out.
 -- --default-pins uses 2 in / 2 out for a plugin whose pin count is not measured.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
 package.path = here .. "/../FX/?.lua;" .. here .. "/../FX/?/init.lua;" .. here .. "/?.lua;" .. package.path
 
 local adapters = require("reaporter.adapters")
 local convert = require("reaporter.core.convert")
+local plan = require("reaporter.core.plan")
 local plugin_list = require("reaporter.core.plugin_list")
 local fs = require("plainfs")
 
@@ -40,6 +45,8 @@ end
 local presets_dir = opt("--presets") or (resource .. "/presets")
 local sidecars = opt("--sidecars") or (resource .. "/MixSurface/fx-presets")
 local only = opt("--only")
+local with_sidecar = not flag("--no-sidecar") and (opt("--sidecars") ~= nil or fs.is_dir(resource .. "/MixSurface"))
+local stamp = os.date("%Y%m%d-%H%M%S")
 
 local os_name = io.popen("uname -sm"):read("l")
 os_name = os_name:find("Darwin") and (os_name:find("arm64") and "macOS-arm64" or "OSX64") or "Linux-x86_64"
@@ -63,9 +70,9 @@ for _, g in ipairs(groups) do
   for _, p in ipairs(g.plugins) do
     if not only or p.fx_name == only then
       local named, unreadable = convert.presets(p, fs)
-      local existing = fs.read(presets_dir .. "/" .. p.ini_name)
+      local ini_in = presets_dir .. "/" .. p.ini_name
       if cmd == "list" then
-        local c = convert.dry_run(named, existing)
+        local c = plan.dry_run(fs, ini_in, named)
         print(("%s\t%s\tfound %d\tnew %d\texist %d%s"):format(g.adapter.vendor, p.fx_name, c.found,
           c.new or 0, c.exist or 0, (p.problem and "\t" .. p.problem or "") .. (c.error and "\t" .. c.error or "")))
       elseif p.listing and not p.problem then
@@ -79,26 +86,34 @@ for _, g in ipairs(groups) do
         do
           local job = convert.new_job(g.adapter, p, named)
           convert.step(job, fs.read)
+          convert.encode(job, p.listing.uid, nin, nout)
           local out = opt("--out")
           local ef = assert(io.open(out .. "/" .. p.ini_name .. ".entries", "wb"))
-          local ini = require("reaporter.core.ini")
-          for _, e in ipairs(job.ok) do
-            ef:write(e[1], "\t", e[2], "\t", hex(ini.entry_data(p.listing.uid, e[3], e[1], nin, nout)), "\n")
-          end
+          for i, e in ipairs(job.entries) do ef:write(e[1], "\t", job.ok[i][2], "\t", hex(e[2]), "\n") end
           ef:close()
           local ff = assert(io.open(out .. "/" .. p.ini_name .. ".failed", "wb"))
           for _, f in ipairs(job.failed) do ff:write(f[1], "\t", f[2], "\n") end
           ff:close()
-          local ok, merged, added, skipped = pcall(convert.merged, job, existing, p.listing.uid, nin, nout)
-          if not ok then
-            print("MERGE REFUSED", p.fx_name, merged)
+          local o = {
+            fs = fs, job = job, found = #named, adapter = g.adapter, plugin = p, named = named,
+            ini_in = ini_in, ini_out = out .. "/" .. p.ini_name, backup_dir = out .. "/ReaPorter-backup", stamp = stamp,
+          }
+          if with_sidecar then
+            o.side_in = sidecars .. "/" .. p.ini_name .. ".json"
+            o.side_out = out .. "/" .. p.ini_name .. ".json"
+          end
+          local r = plan.write(o)
+          if r.error then
+            print("MERGE REFUSED", p.fx_name, r.error)
             status = 1
           else
-            if #added > 0 then fs.write(out .. "/" .. p.ini_name, merged) end
-            local side = convert.sidecar(g.adapter, p, named, merged, fs.read(sidecars .. "/" .. p.ini_name .. ".json"), fs.read)
-            fs.write(out .. "/" .. p.ini_name .. ".json", side)
-            print(("SUMMARY\t%s\t%s\tadded %d\tskipped %d\tfailed %d\tunreadable %d"):format(p.fx_name, p.ini_name,
-              #added, #skipped, #job.failed, #unreadable))
+            print(("SUMMARY\t%s\t%s\tadded %d\tskipped %d\tfailed %d\tunreadable %d\tbackup %s\tsidecar %s"):format(
+              p.fx_name, p.ini_name, r.written, r.skipped, #job.failed, #unreadable, r.backup or "-",
+              r.sidecar_error or (r.sidecar_written and "written") or (r.sidecar and "unchanged") or "off"))
+          end
+          if r.sidecar_error and not r.error then
+            print("SIDECAR REFUSED", p.fx_name, r.sidecar_error)
+            status = 1
           end
         end
       end

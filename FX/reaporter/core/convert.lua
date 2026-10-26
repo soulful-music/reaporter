@@ -126,14 +126,25 @@ function M.step(job, read, more)
   return job.next > #job.named
 end
 
--- The converted entries merged into the plugin's preset file: (bytes, added, skipped).
--- Raises for a file the merge must not touch.
-function M.merged(job, existing, uid, nin, nout)
-  local entries = {}
-  for _, e in ipairs(job.ok) do
-    entries[#entries + 1] = { e[1], ini.entry_data(uid, e[3], e[1], nin, nout) }
+-- Build the converted presets' entry bytes and their hex lines into job.entries until
+-- `more()` returns false or all are built; returns true when done. The hex encoding is
+-- most of a big library's merge time, so it runs a few entries per frame like `step`.
+function M.encode(job, uid, nin, nout, more)
+  job.entries = job.entries or {}
+  while #job.entries < #job.ok do
+    local e = job.ok[#job.entries + 1]
+    local data = ini.entry_data(uid, e[3], e[1], nin, nout)
+    job.entries[#job.entries + 1] = { e[1], data, ini.data_lines(data) }
+    if more and not more() then break end
   end
-  return ini.merge(existing, entries)
+  return #job.entries == #job.ok
+end
+
+-- The converted entries merged into the plugin's preset file: (bytes, added, skipped).
+-- Encodes what `encode` has not yet. Raises for a file the merge must not touch.
+function M.merged(job, existing, uid, nin, nout)
+  if not job.entries or #job.entries < #job.ok then M.encode(job, uid, nin, nout) end
+  return ini.merge(existing, job.entries)
 end
 
 -- The sidecar bytes for the names a preset file lists: (bytes, stats). existing is the

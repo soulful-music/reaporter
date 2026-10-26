@@ -48,19 +48,27 @@ local function checksum(s)
   return sum % 256
 end
 
--- The [PresetK] sections for {{name, data}, ...}, K from `start`, each ending blank.
+-- The Data= / Data_N= lines of one entry's bytes: 16 KiB parts, hex with a checksum byte.
+function M.data_lines(data)
+  local out = {}
+  local i = 0
+  repeat
+    local part = data:sub(i + 1, i + M.DATA_PART)
+    local key = i == 0 and "Data" or ("Data_%d"):format(i // M.DATA_PART)
+    out[#out + 1] = key .. "=" .. hex(part .. string.char(checksum(part)))
+    i = i + M.DATA_PART
+  until i >= math.max(#data, 1)
+  return out
+end
+
+-- The [PresetK] sections for {{name, data, data lines or nil}, ...}, K from `start`, each
+-- ending blank.
 function M.entry_lines(entries, start)
   local out = {}
   for n, e in ipairs(entries) do
     local name, data = e[1], e[2]
     out[#out + 1] = ("[Preset%d]"):format((start or 0) + n - 1)
-    local i = 0
-    repeat
-      local part = data:sub(i + 1, i + M.DATA_PART)
-      local key = i == 0 and "Data" or ("Data_%d"):format(i // M.DATA_PART)
-      out[#out + 1] = key .. "=" .. hex(part .. string.char(checksum(part)))
-      i = i + M.DATA_PART
-    until i >= math.max(#data, 1)
+    for _, l in ipairs(e[3] or M.data_lines(data)) do out[#out + 1] = l end
     out[#out + 1] = ("Len=%d"):format(#data)
     out[#out + 1] = "Name=" .. name
     out[#out + 1] = ""

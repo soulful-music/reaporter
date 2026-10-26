@@ -77,7 +77,8 @@ local function imgui()
   })
 end
 
--- opts: resource (folder), os (GetOS string), fx = {[fx name] = {nin, nout, preset file}}
+-- opts: root (the only folder listings see: the vendor folders on this machine stay
+-- out), resource (folder), os (GetOS string), fx = {[fx name] = {nin, nout, preset file}}
 -- for the scratch-track probe. Returns the stub; stub.calls counts each reaper.* call and
 -- stub.state holds the deferred function, console text, refresh and undo depth.
 function M.reaper(opts)
@@ -85,6 +86,7 @@ function M.reaper(opts)
   local st = { refresh = 0, undo = 0 }
   local cache = {}
   local function listing(dir)
+    if dir:sub(1, #opts.root + 1) ~= opts.root .. "/" then return { dirs = {}, files = {} } end
     if not cache[dir] then
       local dirs, files = plainfs.list(dir)
       if not dirs then dirs, files = {}, {} end

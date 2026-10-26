@@ -1,8 +1,18 @@
 -- File access for running ReaPorter's pure modules outside REAPER (tests, the CLI):
--- POSIX shell `find` for listing, io for reading and writing.
-local M = {}
+-- POSIX shell `find` and `test` for listing and existence, fileio.lua for reading and
+-- writing, so the CLI writes through the same atomic replace and backup as REAPER.
+local fileio = require("reaporter.fileio")
 
 local function quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
+
+local function test(flag, path)
+  local p = io.popen(("test %s %s && echo y"):format(flag, quote(path)))
+  local r = p:read("a")
+  p:close()
+  return r:find("y") ~= nil
+end
+
+local M = fileio.new({ exists = function(path) return test("-e", path) end })
 
 local function entries(dir, type_test)
   local p = io.popen(("find %s -mindepth 1 -maxdepth 1 %s -print0 2>/dev/null"):format(quote(dir), type_test))
@@ -13,12 +23,7 @@ local function entries(dir, type_test)
   return out
 end
 
-function M.is_dir(path)
-  local p = io.popen(("test -d %s && echo y"):format(quote(path)))
-  local r = p:read("a")
-  p:close()
-  return r:find("y") ~= nil
-end
+function M.is_dir(path) return test("-d", path) end
 
 -- (subdir names, file names), or nil when the folder cannot be listed.
 function M.list(dir)
@@ -30,14 +35,11 @@ function M.list(dir)
   return entries(dir, "-type d"), entries(dir, "! -type d")
 end
 
-function M.read(path)
-  local f, err = io.open(path, "rb")
-  if not f then return nil, err end
-  local b = f:read("a")
-  f:close()
-  return b
+function M.mkdir(dir)
+  if not os.execute("mkdir -p " .. quote(dir)) then error("cannot create " .. dir, 0) end
 end
 
+-- A plain write, for the CLI's own report files in --out.
 function M.write(path, bytes)
   local f = assert(io.open(path, "wb"))
   f:write(bytes)

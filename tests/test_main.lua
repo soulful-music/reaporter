@@ -28,7 +28,7 @@ local function setup(files, mixsurface)
 end
 
 local function run(res, home, plugins, extra)
-  local opts = { resource = res }
+  local opts = { resource = res, root = res:match("^(.*)/[^/]*$") }
   for k, v in pairs(extra or {}) do opts[k] = v end
   local stub = R.reaper(opts)
   if extra and extra.ext then for k, v in pairs(extra.ext) do stub.ext[k] = v end end
@@ -47,6 +47,22 @@ T["main.lua converts through its window and a re-run adds nothing"] = function()
   local again = run(res, home, { BH })
   A.truthy(again:find("RESULT\t" .. BH .. "\twritten 0\t", 1, true), again)
   A.eq(R.read(res .. "/presets/vst3-Blackhole.ini"), file)
+  A.eq(R.tree(res .. "/presets"), { "vst3-Blackhole.ini" })
+  R.sh("rm -rf '" .. top .. "'")
+end
+
+T["main.lua refuses a preset file it cannot read and leaves it alone"] = function()
+  local top, res, home = setup({ Blackhole = { "Alpha" } })
+  local path = res .. "/presets/vst3-Blackhole.ini"
+  local mine = ini.ini_bytes({ { "Mine", "\1" } })
+  R.write(path, mine)
+  R.sh("chmod 000 '" .. path .. "'")
+  local report = run(res, home, { BH })
+  R.sh("chmod 644 '" .. path .. "'")
+  local row = report:match("ROW\tVST3: Blackhole %(Eventide%)\t([^\n]*)")
+  A.truthy(row and row:find("^vst3%-Blackhole%.ini\tfound 1\tnew nil\texist nil\t.*exists but cannot be read"), report)
+  A.truthy(not report:find("RESULT", 1, true), report)
+  A.eq(R.read(path), mine)
   A.eq(R.tree(res .. "/presets"), { "vst3-Blackhole.ini" })
   R.sh("rm -rf '" .. top .. "'")
 end
