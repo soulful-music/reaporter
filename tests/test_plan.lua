@@ -130,6 +130,13 @@ T["plan: backup first, then the file; a re-run is a no-op"] = function()
   A.eq(writes({ log = { table.unpack(fs.log, before + 1) } }), {})
 end
 
+T["plan: a vendor name with a trailing space is not converted twice"] = function()
+  local named = { { "AC GTR ", "/v/AC GTR .x" } }
+  local fs = fakefs({ [INI] = ini.ini_bytes({ { "AC GTR ", "\1" } }) })
+  A.eq(plan.fresh(fs, INI, named), {})
+  A.eq(plan.dry_run(fs, INI, named), { found = 1, new = 0, exist = 1 })
+end
+
 T["plan: the sidecar is written only when it changes and imports something"] = function()
   local fs = fakefs({})
   local job = { named = {}, ok = {}, failed = {} }

@@ -4,7 +4,6 @@
 -- mkdir(dir); the writers raise on failure (fileio.lua).
 local convert = require("reaporter.core.convert")
 local ini = require("reaporter.core.ini")
-local text = require("reaporter.core.text")
 
 local M = {}
 
@@ -39,7 +38,7 @@ function M.fresh(fs, path, named)
   end
   local out = {}
   for _, e in ipairs(named) do
-    if not taken[text.lower(e[1])] then out[#out + 1] = e end
+    if not taken[ini.name_key(e[1])] then out[#out + 1] = e end
   end
   return out
 end

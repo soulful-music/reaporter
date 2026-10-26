@@ -123,4 +123,13 @@ T["merge refuses CR-only line ends instead of mixing them"] = function()
   A.truthy(not lf:find("\r", 1, true), "an LF file stays LF")
 end
 
+T["names compare trimmed, as REAPER lists them: a re-run adds no copy"] = function()
+  local first = ini.merge(nil, { { "AC GTR ", "\1" } })
+  A.eq(ini.listed_names(first), { "AC GTR" })
+  local again, added, skipped = ini.merge(first, { { "AC GTR ", "\1" }, { " ac gtr", "\2" } })
+  A.eq({ again, added, skipped }, { first, {}, { "AC GTR ", " ac gtr" } })
+  local _, added2, skipped2 = ini.merge("[General]\nNbPresets=0\n", { { "Hall ", "\1" }, { "hall", "\2" } })
+  A.eq({ added2, skipped2 }, { { "Hall " }, { "hall" } })
+end
+
 return T

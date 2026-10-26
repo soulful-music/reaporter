@@ -4,7 +4,6 @@ local ini = require("reaporter.core.ini")
 local plugin_list = require("reaporter.core.plugin_list")
 local scan = require("reaporter.core.scan")
 local sidecar = require("reaporter.core.sidecar")
-local text = require("reaporter.core.text")
 
 local M = {}
 
@@ -86,7 +85,7 @@ function M.dry_run(named, existing)
     taken = f.taken
   end
   for _, e in ipairs(named) do
-    local k = text.lower(e[1])
+    local k = ini.name_key(e[1])
     if taken[k] then
       counts.exist = counts.exist + 1
     else

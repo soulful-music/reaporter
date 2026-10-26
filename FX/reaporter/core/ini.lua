@@ -140,6 +140,10 @@ local function read(body)
   return r
 end
 
+-- How names compare: as REAPER lists them (trimmed), ignoring case. A vendor file
+-- "AC GTR .tide" makes an entry named "AC GTR ", which REAPER lists as "AC GTR".
+function M.name_key(name) return text.lower(text.strip_ascii(name)) end
+
 local function body_of(data)
   return text.starts_with(data, BOM) and data:sub(4) or data
 end
@@ -207,7 +211,7 @@ end
 -- Scan an existing file for what a merge needs. Returns {body, bom, nb, nb_eq, nb_to, taken} or
 -- raises for a file the merge must not touch, where a guess could lose an entry: a CR
 -- not followed by LF, no NbPresets or one that is not a whole number, a repeated
--- section, or an entry past NbPresets. `taken` holds every entry name, lowercased.
+-- section, or an entry past NbPresets. `taken` holds every entry's name_key.
 function M.inspect(existing)
   local body = body_of(existing)
   local cr = body:find("\r", 1, true)
@@ -236,7 +240,7 @@ function M.inspect(existing)
   local taken = {}
   for k = 0, nb - 1 do
     local name = r.names[k]
-    if name then taken[text.lower(name)] = true end
+    if name then taken[M.name_key(name)] = true end
   end
   return { body = body, bom = body ~= existing, nb = nb, nb_eq = r.nb_eq, nb_to = r.nb_to, taken = taken }
 end
@@ -250,7 +254,8 @@ local function last_line(s)
 end
 
 -- Append {{name, data}, ...} to a preset file's bytes, keeping every existing byte except
--- the NbPresets digits. A name the file has (ignoring case) is skipped. Returns
+-- the NbPresets digits. A name the file has (name_key: trimmed, ignoring case) is
+-- skipped, as is a repeat within `entries`. Returns
 -- (bytes, added names, skipped names); raises for a file it must not touch (inspect).
 function M.merge(existing, entries)
   if not existing or existing == "" then
@@ -262,7 +267,7 @@ function M.merge(existing, entries)
   local eol = (f.body:find("\r\n", 1, true) or not f.body:find("\n", 1, true)) and "\r\n" or "\n"
   local add, added, skipped = {}, {}, {}
   for _, e in ipairs(entries) do
-    local key = text.lower(e[1])
+    local key = M.name_key(e[1])
     if f.taken[key] then
       skipped[#skipped + 1] = e[1]
     else
