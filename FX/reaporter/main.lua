@@ -247,8 +247,8 @@ local function start_convert()
   S.phase = "converting"
 end
 
--- Write one plugin's merged file (backup first) and its sidecar (core/plan.lua).
-local function finish_plugin(p, job)
+-- The write options for one plugin (core/plan.lua).
+local function write_opts(p, job)
   local o = {
     fs = fs, job = job, found = #p.named, adapter = p.group.adapter, plugin = p, named = p.named,
     ini_in = PRESETS .. "/" .. p.ini_name, ini_out = PRESETS .. "/" .. p.ini_name,
@@ -258,26 +258,77 @@ local function finish_plugin(p, job)
     o.side_in = SIDECARS .. "/" .. p.ini_name .. ".json"
     o.side_out = o.side_in
   end
-  local ok, err = pcall(function()
-    if #job.ok > 0 then
-      local pins = p.pins
-      if not pins then
-        local probed = probe_fx(p.listing.fx_name)
-        if not probed then error("REAPER could not load the plugin to read its pin count", 0) end
-        pins = { probed.nin, probed.nout }
-        p.pins = pins
-      end
-      convert.encode(job, p.listing.uid, pins[1], pins[2])
-    end
-  end)
-  local r
-  if ok then
-    r = plan.write(o)
-  else
-    r = { written = 0, skipped = #p.named - #job.named, failed = job.failed, error = tostring(err) }
-  end
+  return o
+end
+
+local function add_result(p, r)
   r.plugin = p
   S.results[#S.results + 1] = r
+end
+
+-- The next plugin off the queue as the current job, its preset file resolved and its
+-- fresh names picked; false when the queue is empty.
+local function next_job()
+  local p = table.remove(S.queue, 1)
+  if not p then return false end
+  local ok, fresh_named = true, nil
+  if p.unresolved then
+    local pok, probed = pcall(probe_fx, p.listing.fx_name)
+    if not pok or not probed or not probed.ini_name then
+      ok, fresh_named = false, pok and "REAPER could not load the plugin to read its preset file" or probed
+    else
+      p.ini_name, p.unresolved = probed.ini_name, nil
+      p.pins = p.pins or { probed.nin, probed.nout }
+    end
+  end
+  if ok then ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named) end
+  if not ok then
+    add_result(p, { written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) })
+    return true
+  end
+  S.total = S.total - adds(p) + #fresh_named
+  S.current = { plugin = p, job = convert.new_job(p.group.adapter, p, fresh_named), stage = "convert" }
+  return true
+end
+
+-- One stage of the current job, as far as `more()` allows. The stages: convert the
+-- presets, build their entries (a few per frame each); then merge, back up and write the
+-- preset file, and in the next stage the sidecar. The preset file's read, backup and
+-- write stay in one frame, so nothing can change the file between them; the same holds
+-- for the sidecar.
+local function job_stage(c, more)
+  local p, job = c.plugin, c.job
+  if c.stage == "convert" then
+    local before = job.next
+    local done = convert.step(job, fs.read, more)
+    S.done_count = S.done_count + (job.next - before)
+    if not done then return end
+    c.stage = #job.ok > 0 and "encode" or "ini"
+    if #job.ok > 0 and not p.pins then
+      local ok, probed = pcall(probe_fx, p.listing.fx_name)
+      if not ok or not probed then
+        add_result(p, { written = 0, skipped = #p.named - #job.named, failed = job.failed,
+          error = ok and "REAPER could not load the plugin to read its pin count" or tostring(probed) })
+        S.current = nil
+        return
+      end
+      p.pins = { probed.nin, probed.nout }
+    end
+  elseif c.stage == "encode" then
+    if convert.encode(job, p.listing.uid, p.pins[1], p.pins[2], more) then c.stage = "ini" end
+  elseif c.stage == "ini" then
+    c.opts = write_opts(p, job)
+    c.result, c.merged = plan.write_ini(c.opts)
+    if c.opts.side_in then
+      c.stage = "sidecar"
+    else
+      add_result(p, c.result)
+      S.current = nil
+    end
+  else
+    add_result(p, plan.write_sidecar(c.opts, c.result, c.merged))
+    S.current = nil
+  end
 end
 
 -- One frame of conversion work.
@@ -285,39 +336,11 @@ local function convert_tick()
   local deadline = reaper.time_precise() + FRAME_BUDGET
   local function more() return reaper.time_precise() < deadline end
   while more() do
-    if not S.current then
-      local p = table.remove(S.queue, 1)
-      if not p then
-        S.phase = "done"
-        return
-      end
-      local ok, fresh_named = true, nil
-      if p.unresolved then
-        local pok, probed = pcall(probe_fx, p.listing.fx_name)
-        if not pok or not probed or not probed.ini_name then
-          ok, fresh_named = false, pok and "REAPER could not load the plugin to read its preset file" or probed
-        else
-          p.ini_name, p.unresolved = probed.ini_name, nil
-          p.pins = p.pins or { probed.nin, probed.nout }
-        end
-      end
-      if ok then ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named) end
-      if ok then S.total = S.total - adds(p) + #fresh_named end
-      if not ok then
-        S.results[#S.results + 1] = { plugin = p, written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) }
-      else
-        S.current = { plugin = p, job = convert.new_job(p.group.adapter, p, fresh_named) }
-      end
-    end
-    local c = S.current
-    if c then
-      local before = c.job.next
-      local done = convert.step(c.job, fs.read, more)
-      S.done_count = S.done_count + (c.job.next - before)
-      if done then
-        finish_plugin(c.plugin, c.job)
-        S.current = nil
-      end
+    if S.current then
+      job_stage(S.current, more)
+    elseif not next_job() then
+      S.phase = "done"
+      return
     end
   end
 end

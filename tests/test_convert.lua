@@ -88,6 +88,17 @@ T["a failing preset is reported and the rest convert"] = function()
   A.eq({ uid, nin, nout, name }, { plugin.listing.uid, 4, 2, "C" })
 end
 
+T["entries are built a few per frame and merge as when built at once"] = function()
+  local job = { ok = { { "A", "/a", "S1" }, { "B", "/b", "S2" }, { "C", "/c", "S3" } }, named = {}, failed = {} }
+  local calls = 0
+  A.eq(convert.encode(job, 5, 2, 2, function() calls = calls + 1; return calls < 2 end), false)
+  A.eq(#job.entries, 2)
+  A.eq(convert.encode(job, 5, 2, 2), true)
+  local whole = { ok = job.ok, named = {}, failed = {} }
+  A.eq(convert.merged(job, nil), convert.merged(whole, nil, 5, 2, 2))
+  A.eq(job.entries[3], { "C", ini.entry_data(5, "S3", "C", 2, 2), ini.data_lines(ini.entry_data(5, "S3", "C", 2, 2)) })
+end
+
 T["a re-run adds nothing and keeps the file"] = function()
   local tree = crp_tree({ ["A.crp_preset"] = F.partial_state("CRP_PartialStateVT", { 1 }) })
   local env = env_for(tree)
