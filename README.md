@@ -26,7 +26,10 @@ which ReaPack installs from its default repository.
 
 ReaPorter scans for each vendor's preset folders and matches every plugin to REAPER's plugin
 list. For each plugin it shows how many presets it found, how many are new and how many
-REAPER already has under the same name. That is a dry run: nothing is written yet.
+REAPER already has under the same name. That is a dry run: nothing is written or created
+yet. A plugin REAPER lists under another name shows "resolved on Convert": Convert loads it
+once on a temporary track at the end of the project to ask REAPER for its preset file, and
+removes the track again.
 
 Vendors fold open to show their plugins, and the search box filters by plugin or vendor
 name; Convert still acts on everything ticked, and says how many ticked plugins the search
@@ -37,7 +40,10 @@ failed, with the reason.
 What it guarantees:
 
 - **A backup first.** Before it changes a preset file it copies it to
-  `<resource>/presets/ReaPorter-backup/<file>.<date-time>.ini`.
+  `<resource>/presets/ReaPorter-backup/<file>.<date-time>.ini` (`-2`, `-3`, ... when that
+  name is taken; a backup is never overwritten).
+- **A file it cannot read is left alone.** A preset file or MixSurface file that exists but
+  cannot be read is reported and never replaced.
 - **Existing presets are never altered.** New entries are appended; every byte already in the
   file stays as it is, except the preset count.
 - **No duplicates.** A name the file already has (ignoring case) is skipped and reported.
