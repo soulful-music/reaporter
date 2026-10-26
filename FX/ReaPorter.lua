@@ -1,6 +1,9 @@
 -- @description ReaPorter: convert plugin-vendor presets into REAPER presets
 -- @author Toms
 -- @version 1.0.0
+-- @links
+--   Repository https://github.com/soulful-music/reaporter
+--   Issues https://github.com/soulful-music/reaporter/issues
 -- @changelog
 --   First release. Converts the presets of DMGAudio, Eventide, FabFilter, LiquidSonics,
 --   Relab (LX480 v4), Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that
@@ -17,7 +20,7 @@
 --   Every preset file it changes is backed up first to presets/ReaPorter-backup; presets
 --   already in a file are never altered, and a name already there is skipped.
 --
---   Needs ReaImGui. Verified on macOS; Windows and Linux: please report.
+--   Needs ReaImGui 0.10 or newer. Verified on macOS; Windows and Linux: please report.
 -- @provides
 --   [nomain] reaporter/adapters/dmgaudio.lua
 --   [nomain] reaporter/adapters/dmgaudio_fresh.lua

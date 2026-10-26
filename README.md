@@ -16,7 +16,7 @@ macOS (0.9.2 on macOS 26).
 1. In REAPER: **Extensions > ReaPack > Import repositories...**, paste
 
    ```
-   https://raw.githubusercontent.com/<github-user>/reaporter/main/index.xml
+   https://raw.githubusercontent.com/soulful-music/reaporter/main/index.xml
    ```
 
 2. **Extensions > ReaPack > Browse packages**, find **ReaPorter**, install it. Install
