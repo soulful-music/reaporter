@@ -32,6 +32,7 @@
 --   [nomain] reaporter/codec/xml.lua
 --   [nomain] reaporter/codec/zlib.lua
 --   [nomain] reaporter/core/convert.lua
+--   [nomain] reaporter/core/failed.lua
 --   [nomain] reaporter/core/ini.lua
 --   [nomain] reaporter/core/plan.lua
 --   [nomain] reaporter/core/plugin_list.lua
@@ -40,6 +41,7 @@
 --   [nomain] reaporter/core/text.lua
 --   [nomain] reaporter/fileio.lua
 --   [nomain] reaporter/main.lua
+--   [nomain] reaporter/version.lua
 
 local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
 package.path = dir .. "?.lua;" .. dir .. "?/init.lua;" .. package.path

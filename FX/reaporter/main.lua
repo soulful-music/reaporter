@@ -2,6 +2,7 @@
 -- ReaImGui window. Everything that converts lives in the pure modules.
 local adapters = require("reaporter.adapters")
 local convert = require("reaporter.core.convert")
+local failed = require("reaporter.core.failed")
 local fileio = require("reaporter.fileio")
 local plan = require("reaporter.core.plan")
 local plugin_list = require("reaporter.core.plugin_list")
@@ -35,6 +36,7 @@ local SEP = package.config:sub(1, 1)
 local RESOURCE = reaper.GetResourcePath():gsub("\\", "/")
 local PRESETS = RESOURCE .. "/presets"
 local SIDECARS = RESOURCE .. "/MixSurface/fx-presets"
+local FAILED = PRESETS .. "/" .. failed.FILE
 
 ---------------------------------------------------------------------------------------
 -- files
@@ -192,8 +194,8 @@ local function available(p)
   return not p.problem and p.counts and not p.counts.error and p.counts.found > 0
 end
 
--- The presets a ticked plugin adds: the dry run's new, or every one found while its preset
--- file is resolved on Convert.
+-- The presets a ticked plugin adds: the dry run's new (known failures left out), or every
+-- one found while its preset file is resolved on Convert.
 local function adds(p) return p.counts.new or p.counts.found end
 
 local function start_scan()
@@ -218,6 +220,8 @@ local function start_scan()
     for _, p in ipairs(S.rows) do S.known[p.fx_name] = true end
   end
   S.mixsurface = fs.is_dir(RESOURCE .. "/MixSurface")
+  S.failed = failed.decode(fs.read(FAILED))
+  S.known_failed = failed.checker(S.failed, fs.read)
   S.scan_next = 1
   S.phase = "scan"
 end
@@ -233,7 +237,7 @@ local function scan_one(p)
   if p.unresolved then
     p.counts = { found = #p.named }
   else
-    p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named)
+    p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named, S.known_failed)
   end
   if not S.known[p.fx_name] then
     S.known[p.fx_name] = true
@@ -267,7 +271,7 @@ end
 -- The write options for one plugin (core/plan.lua).
 local function write_opts(p, job)
   local o = {
-    fs = fs, job = job, found = #p.named, adapter = p.group.adapter, plugin = p, named = p.named,
+    fs = fs, job = job, found = #p.named, known = p.known, adapter = p.group.adapter, plugin = p, named = p.named,
     ini_in = PRESETS .. "/" .. p.ini_name, ini_out = PRESETS .. "/" .. p.ini_name,
     backup_dir = PRESETS .. "/ReaPorter-backup", stamp = S.stamp,
   }
@@ -281,6 +285,19 @@ end
 local function add_result(p, r)
   r.plugin = p
   S.results[#S.results + 1] = r
+  if S.current and S.current.job and failed.record(S.failed, S.current.job) then S.failed_dirty = true end
+end
+
+-- The known failures, written once a Convert is done (only when they changed). A failure
+-- to write costs only the next dry run's "can't convert" counts.
+local function save_failed()
+  if not S.failed_dirty then return end
+  S.failed_dirty = nil
+  local ok, err = pcall(function()
+    fs.mkdir(PRESETS)
+    fs.write_atomic(FAILED, failed.encode(S.failed))
+  end)
+  if not ok then S.failed_error = tostring(err) end
 end
 
 -- The next plugin off the queue as the current job, its preset file resolved and its
@@ -298,12 +315,14 @@ local function next_job()
       p.pins = p.pins or { probed.nin, probed.nout }
     end
   end
-  if ok then ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named) end
+  local nknown
+  if ok then ok, fresh_named, nknown = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named, S.known_failed) end
   if not ok then
     add_result(p, { written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) })
     return true
   end
   S.total = S.total - adds(p) + #fresh_named
+  p.known = nknown
   S.current = { plugin = p, job = convert.new_job(p.group.adapter, p, fresh_named), stage = "convert" }
   return true
 end
@@ -356,6 +375,7 @@ local function convert_tick()
     if S.current then
       job_stage(S.current, more)
     elseif not next_job() then
+      save_failed()
       S.phase = "done"
       return
     end
@@ -397,13 +417,20 @@ local function draw_search()
   if ImGui.Button(ctx, "Collapse all") then set_all_open(false) end
 end
 
-local function count_cells(found, new, exist)
+local function count_cells(found, new, exist, nfailed, reasons)
   ImGui.TableNextColumn(ctx)
   ImGui.Text(ctx, tostring(found))
   ImGui.TableNextColumn(ctx)
   if new > 0 then ImGui.Text(ctx, tostring(new)) else ImGui.TextDisabled(ctx, "0") end
   ImGui.TableNextColumn(ctx)
   if exist > 0 then ImGui.TextDisabled(ctx, tostring(exist)) end
+  ImGui.TableNextColumn(ctx)
+  if (nfailed or 0) > 0 then
+    ImGui.TextDisabled(ctx, tostring(nfailed))
+    if reasons and ImGui.IsItemHovered(ctx) then
+      ImGui.SetTooltip(ctx, "Failed on an earlier Convert and unchanged since:\n" .. failed.summary(reasons))
+    end
+  end
 end
 
 local function draw_plugin(p)
@@ -441,7 +468,7 @@ local function draw_plugin(p)
         .. ": Convert asks REAPER for its preset file, then counts what is new.")
     end
   else
-    count_cells(p.counts.found, p.counts.new, p.counts.exist)
+    count_cells(p.counts.found, p.counts.new, p.counts.exist, p.counts.failed, p.counts.reasons)
   end
 end
 
@@ -449,24 +476,28 @@ local function draw_list()
   local flags = ImGui.TableFlags_RowBg | ImGui.TableFlags_ScrollY | ImGui.TableFlags_SizingStretchProp
   local _, avail_h = ImGui.GetContentRegionAvail(ctx)
   local footer = ImGui.GetFrameHeightWithSpacing(ctx) * (S.mixsurface and 3 or 2) + 4
-  if not ImGui.BeginTable(ctx, "plugins", 4, flags, 0, math.max(120, avail_h - footer)) then return end
+  if not ImGui.BeginTable(ctx, "plugins", 5, flags, 0, math.max(120, avail_h - footer)) then return end
   ImGui.TableSetupScrollFreeze(ctx, 0, 1)
   ImGui.TableSetupColumn(ctx, "Plugin", ImGui.TableColumnFlags_WidthStretch, 3)
   ImGui.TableSetupColumn(ctx, "Found", ImGui.TableColumnFlags_WidthStretch, 1)
   ImGui.TableSetupColumn(ctx, "New", ImGui.TableColumnFlags_WidthStretch, 1)
   ImGui.TableSetupColumn(ctx, "Already in REAPER", ImGui.TableColumnFlags_WidthStretch, 1.4)
+  ImGui.TableSetupColumn(ctx, "Can't convert", ImGui.TableColumnFlags_WidthStretch, 1.2)
   ImGui.TableHeadersRow(ctx)
   local searching = S.search ~= ""
   for _, g in ipairs(S.groups) do
     local vendor = g.adapter.vendor
     local shown = {}
-    local avail, ticked, found, new, exist = 0, 0, 0, 0, 0
+    local avail, ticked, found, new, exist, nfailed = 0, 0, 0, 0, 0, 0
+    local reasons = {}
     for _, p in ipairs(g.plugins) do
       if matches(g, p) then shown[#shown + 1] = p end
       if available(p) then
         avail = avail + 1
         if S.ticked[p.fx_name] then ticked = ticked + 1 end
         found, new, exist = found + p.counts.found, new + adds(p), exist + (p.counts.exist or 0)
+        nfailed = nfailed + (p.counts.failed or 0)
+        for r, n in pairs(p.counts.reasons or {}) do reasons[r] = (reasons[r] or 0) + n end
       end
     end
     if not searching or #shown > 0 then
@@ -497,7 +528,7 @@ local function draw_list()
         ImGui.TableNextColumn(ctx)
         ImGui.TextDisabled(ctx, "no presets found")
       elseif avail > 0 then
-        count_cells(found, new, exist)
+        count_cells(found, new, exist, nfailed, reasons)
       end
       if open then
         for _, p in ipairs(shown) do draw_plugin(p) end
@@ -522,15 +553,19 @@ end
 local function draw_results()
   local _, avail_h = ImGui.GetContentRegionAvail(ctx)
   if not ImGui.BeginChild(ctx, "results", 0, avail_h - ImGui.GetFrameHeightWithSpacing(ctx) - 8) then return end
-  local written, skipped, failed = 0, 0, 0
+  local written, skipped, nfail, known = 0, 0, 0, 0
   for _, r in ipairs(S.results) do
-    written, skipped, failed = written + r.written, skipped + r.skipped, failed + #r.failed
+    written, skipped, nfail, known = written + r.written, skipped + r.skipped, nfail + #r.failed, known + (r.known or 0)
   end
-  ImGui.Text(ctx, ("Written %d, skipped %d (name exists), failed %d."):format(written, skipped, failed))
+  local line = ("Written %d, skipped %d (name exists), failed %d."):format(written, skipped, nfail)
+  if known > 0 then line = line .. (" %d known not to convert, not tried again."):format(known) end
+  ImGui.Text(ctx, line)
+  if S.failed_error then ImGui.TextColored(ctx, RED, "The list of presets that can't convert was not saved: " .. S.failed_error) end
   ImGui.Spacing(ctx)
   for _, r in ipairs(S.results) do
     local p = r.plugin
     local head = ("%s: %d written, %d skipped, %d failed"):format(plugin_label(p), r.written, r.skipped, #r.failed)
+    if (r.known or 0) > 0 then head = head .. (", %d can't convert"):format(r.known) end
     if r.error then
       ImGui.TextColored(ctx, RED, plugin_label(p) .. ": preset file not written: " .. r.error)
     elseif #r.failed > 0 then
@@ -669,17 +704,17 @@ local function qa_step()
     local f = assert(io.open(QA.report, "w"))
     for _, p in ipairs(S.rows) do
       local c = p.counts or {}
-      f:write(("ROW\t%s\t%s\tfound %s\tnew %s\texist %s\t%s\n"):format(p.fx_name, p.ini_name,
+      f:write(("ROW\t%s\t%s\tfound %s\tnew %s\texist %s\t%s\tfailed %s\n"):format(p.fx_name, p.ini_name,
         tostring(c.found), tostring(c.new), tostring(c.exist),
-        p.problem or c.error or (p.unresolved and "resolved on Convert") or ""))
+        p.problem or c.error or (p.unresolved and "resolved on Convert") or "", tostring(c.failed or 0)))
     end
     for _, r in ipairs(S.results) do
       local sc = r.sidecar
-      f:write(("RESULT\t%s\twritten %d\tskipped %d\tfailed %d\tpins %s\tbackup %s\tsidecar %s\terror %s\tsidecar error %s\n"):format(
+      f:write(("RESULT\t%s\twritten %d\tskipped %d\tfailed %d\tpins %s\tbackup %s\tsidecar %s\terror %s\tsidecar error %s\tknown %d\n"):format(
         r.plugin.fx_name, r.written, r.skipped, #r.failed,
         r.plugin.pins and (r.plugin.pins[1] .. "/" .. r.plugin.pins[2]) or "-", r.backup or "-",
         sc and ((r.sidecar_written and "written" or "unchanged") .. " imported " .. sc.imported .. " folder " .. sc.folder) or "-",
-        r.error or "-", r.sidecar_error or "-"))
+        r.error or "-", r.sidecar_error or "-", r.known or 0))
       for k = 1, math.min(3, #r.failed) do f:write("  FAIL\t", r.failed[k][1], "\t", r.failed[k][2], "\n") end
     end
     f:write("DONE\n")

@@ -19,28 +19,36 @@ function M.read_existing(fs, path)
 end
 
 -- The dry run against the preset file at `path`: convert.dry_run's counts, or {found,
--- error} when the file cannot be read or merged.
-function M.dry_run(fs, path, named)
+-- error} when the file cannot be read or merged. known: as convert.dry_run.
+function M.dry_run(fs, path, named, known)
   local ok, existing = pcall(M.read_existing, fs, path)
   if not ok then return { found = #named, error = tostring(existing) } end
-  return convert.dry_run(named, existing)
+  return convert.dry_run(named, existing, known)
 end
 
 -- The named presets the file at `path` does not hold yet (the merge would skip the
--- others). Raises as read_existing; a file the merge refuses keeps every name, and the
--- merge reports why.
-function M.fresh(fs, path, named)
+-- others) and that are not known to fail (known(path) -> reason or nil), and how many
+-- were left out as known failures. Raises as read_existing; a file the merge refuses
+-- keeps every name, and the merge reports why.
+function M.fresh(fs, path, named, known)
   local existing = M.read_existing(fs, path)
   local taken = {}
   if existing and existing ~= "" then
     local ok, f = pcall(ini.inspect, existing)
     if ok then taken = f.taken end
   end
-  local out = {}
+  local out, nknown = {}, 0
   for _, e in ipairs(named) do
-    if not taken[ini.name_key(e[1])] then out[#out + 1] = e end
+    local k = ini.name_key(e[1])
+    if not taken[k] then
+      if known and known(e[2]) then
+        nknown = nknown + 1
+      else
+        out[#out + 1] = e
+      end
+    end
   end
-  return out
+  return out, nknown
 end
 
 -- A backup path no file has: <dir>/<stem>.<stamp>.ini, else <stem>.<stamp>-2.ini, ...
@@ -56,14 +64,16 @@ function M.backup_path(fs, dir, ini_name, stamp)
 end
 
 -- Merge a finished job into the preset file and write it. o = {fs, job, found (presets
--- found for the plugin), ini_in (the file merged into), ini_out (the file written; the
--- same in REAPER), backup_dir, stamp}. The job's entries are built (convert.encode) when
+-- found for the plugin), known (of those, left out as known failures; default 0), ini_in
+-- (the file merged into), ini_out (the file written; the same in REAPER), backup_dir,
+-- stamp}. The job's entries are built (convert.encode) when
 -- it has any. Returns (record, merged bytes or nil): record = {written, skipped, failed,
 -- backup, error}. Order: read (refusing an unreadable file), merge, then only when the
 -- merge adds entries: the backup, read back, before the atomic write.
 function M.write_ini(o)
   local fs, job = o.fs, o.job
-  local r = { written = 0, skipped = o.found - #job.named, failed = job.failed }
+  local known = o.known or 0
+  local r = { written = 0, skipped = o.found - #job.named - known, failed = job.failed, known = known }
   local merged
   local ok, err = pcall(function()
     local existing = M.read_existing(fs, o.ini_in)

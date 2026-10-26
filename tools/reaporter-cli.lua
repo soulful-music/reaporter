@@ -4,21 +4,25 @@
 --   lua5.4 tools/reaporter-cli.lua export --resource DIR --out DIR [--presets DIR]
 --          [--sidecars DIR] [--only FX_NAME] [--default-pins]
 --
--- list prints every vendor plugin with its status and dry-run counts. export writes, per
+-- list prints every vendor plugin with its status and dry-run counts; presets that failed
+-- on an earlier Convert and are unchanged (--presets/ReaPorter-failed.json) count as
+-- "can't convert", not new. export writes, per
 -- plugin REAPER lists, into --out: <ini name> (the merge into --presets' file of that
 -- name, or a new file), <ini name>.entries (name TAB path TAB entry hex, one per
 -- converted preset), <ini name>.failed (path TAB reason) and <ini name>.json (the
 -- sidecar, merged into --sidecars' file). The preset file and the sidecar go through
 -- core/plan.lua as in REAPER: written only when the window would write them, with the
 -- file merged into backed up to --out/ReaPorter-backup first. The sidecar is on when
--- <resource>/MixSurface exists or --sidecars is given, off with --no-sidecar. It never
--- writes anywhere but --out.
+-- <resource>/MixSurface exists or --sidecars is given, off with --no-sidecar. export also
+-- writes --out/ReaPorter-failed.json, the known failures after this run. It never writes
+-- anywhere but --out.
 -- --default-pins uses 2 in / 2 out for a plugin whose pin count is not measured.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
 package.path = here .. "/../FX/?.lua;" .. here .. "/../FX/?/init.lua;" .. here .. "/?.lua;" .. package.path
 
 local adapters = require("reaporter.adapters")
 local convert = require("reaporter.core.convert")
+local failed = require("reaporter.core.failed")
 local plan = require("reaporter.core.plan")
 local plugin_list = require("reaporter.core.plugin_list")
 local fs = require("plainfs")
@@ -59,6 +63,10 @@ for _, n in ipairs(plugin_list.file_names(os_name)) do
   end
 end
 
+local failed_store = failed.decode(fs.read(presets_dir .. "/" .. failed.FILE))
+local known = failed.checker(failed_store, fs.read)
+local failed_changed = false
+
 local env = { os = os_name, dirs = convert.dirs(os_name, os.getenv("HOME")), fs = fs, vst3 = vst3 }
 local groups = convert.discover(adapters, env)
 
@@ -72,9 +80,9 @@ for _, g in ipairs(groups) do
       local named, unreadable = convert.presets(p, fs)
       local ini_in = presets_dir .. "/" .. p.ini_name
       if cmd == "list" then
-        local c = plan.dry_run(fs, ini_in, named)
-        print(("%s\t%s\tfound %d\tnew %d\texist %d%s"):format(g.adapter.vendor, p.fx_name, c.found,
-          c.new or 0, c.exist or 0, (p.problem and "\t" .. p.problem or "") .. (c.error and "\t" .. c.error or "")))
+        local c = plan.dry_run(fs, ini_in, named, known)
+        print(("%s\t%s\tfound %d\tnew %d\texist %d\tcan't convert %d%s"):format(g.adapter.vendor, p.fx_name, c.found,
+          c.new or 0, c.exist or 0, c.failed or 0, (p.problem and "\t" .. p.problem or "") .. (c.error and "\t" .. c.error or "")))
       elseif p.listing and not p.problem then
         local nin, nout = 2, 2
         if p.pins then
@@ -86,6 +94,7 @@ for _, g in ipairs(groups) do
         do
           local job = convert.new_job(g.adapter, p, named)
           convert.step(job, fs.read)
+          if failed.record(failed_store, job) then failed_changed = true end
           convert.encode(job, p.listing.uid, nin, nout)
           local out = opt("--out")
           local ef = assert(io.open(out .. "/" .. p.ini_name .. ".entries", "wb"))
@@ -121,4 +130,5 @@ for _, g in ipairs(groups) do
     ::continue::
   end
 end
+if cmd == "export" and failed_changed then fs.write(opt("--out") .. "/" .. failed.FILE, failed.encode(failed_store)) end
 os.exit(status)

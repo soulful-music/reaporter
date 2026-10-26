@@ -140,4 +140,39 @@ T["ticks and open vendors are saved when they change, before any Convert"] = fun
   R.sh("rm -rf '" .. top .. "'")
 end
 
+T["a preset that failed is not new on the next scan, and not tried again until it changes"] = function()
+  local top, res, home = setup({ Blackhole = { "Alpha" } })
+  local bad = home .. "/Music/Eventide/Blackhole/Broken.tide"
+  R.write(bad, "[1, 2]")
+  local report = run(res, home, {})
+  A.truthy(row(report, BH):find("found 2\tnew 2\texist 0\t\tfailed 0", 1, true), report)
+  report = run(res, home, { BH })
+  A.truthy(result(report, BH):find("^written 1\tskipped 0\tfailed 1\t"), report)
+  A.truthy(R.read(res .. "/presets/ReaPorter-failed.json"):find("Broken.tide", 1, true))
+  report = run(res, home, {})
+  A.truthy(row(report, BH):find("found 2\tnew 0\texist 1\t\tfailed 1", 1, true), report)
+  report = run(res, home, { BH })
+  A.truthy(result(report, BH):find("^written 0\tskipped 1\tfailed 0\t.*\tknown 1$"), report)
+  R.write(bad, "[1, 2, 3]")
+  report = run(res, home, {})
+  A.truthy(row(report, BH):find("found 2\tnew 1\texist 1\t\tfailed 0", 1, true), report)
+  R.sh("rm -rf '" .. top .. "'")
+end
+
+T["a plugin whose only new presets are known failures is not ticked when first seen"] = function()
+  local top, res, home = setup({ Blackhole = { "Alpha" } })
+  R.write(home .. "/Music/Eventide/Blackhole/Broken.tide", "[1, 2]")
+  run(res, home, { BH })
+  -- First seen (nothing known yet), scanned and left open: the scan alone sets the ticks.
+  local function first_scan()
+    local stub = R.reaper({ resource = res, root = top, fx = FX })
+    R.run_main(stub, { hold = true, report = res .. "/qa.txt" }, home, nil, 50)
+    return stub.ext["ReaPorter/ticked"] or ""
+  end
+  A.eq(first_scan(), "")
+  R.write(home .. "/Music/Eventide/Blackhole/Gamma.tide", tide(3))
+  A.eq(first_scan(), BH, "a plugin with a new preset is ticked")
+  R.sh("rm -rf '" .. top .. "'")
+end
+
 return T

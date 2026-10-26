@@ -29,4 +29,9 @@ T["the pure modules make no reaper.* calls"] = function()
   A.eq(hits, "")
 end
 
+T["version.lua matches @version"] = function()
+  local header = assert(io.open(root .. "/ReaPorter.lua")):read("a")
+  A.eq(require("reaporter.version"), header:match("@version%s+(%S+)"))
+end
+
 return T

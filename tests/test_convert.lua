@@ -1,6 +1,8 @@
 local A = require("assert")
 local F = require("fixtures")
 local convert = require("reaporter.core.convert")
+local failed = require("reaporter.core.failed")
+local plan = require("reaporter.core.plan")
 local ini = require("reaporter.core.ini")
 local plugin_list = require("reaporter.core.plugin_list")
 
@@ -134,6 +136,42 @@ T["preset folders per OS"] = function()
   A.eq(w, { common = "C:/ProgramData", user = "C:/Users/me/AppData/Roaming", music = "C:/Users/me/Music", shared = "C:/Users/Public" })
   local m = convert.dirs("macOS-arm64", "/Users/me")
   A.eq(m.user, "/Users/me/Library/Application Support")
+end
+
+T["known failures: remembered with size and checksum, a changed file is new again"] = function()
+  local files = { ["/v/Bad.x"] = "not a preset", ["/v/Good.x"] = "fine" }
+  local read = function(p) return files[p] end
+  local adapter = { to_state = function(b) if b == "fine" then return "S" end error("synthetic reason", 0) end }
+  local named = { { "Bad", "/v/Bad.x" }, { "Good", "/v/Good.x" } }
+  local job = convert.new_job(adapter, {}, named)
+  convert.step(job, read)
+  local store = failed.decode(nil)
+  A.eq(failed.record(store, job), true)
+  A.eq(failed.record(store, job), false, "recording the same failures again changes nothing")
+  local again = failed.decode(failed.encode(store))
+  A.eq(again.files["/v/Bad.x"], { size = 12, adler32 = select(2, failed.fingerprint("not a preset")), reason = "synthetic reason" })
+  local known = failed.checker(again, read)
+  A.eq(convert.dry_run(named, nil, known), { found = 2, new = 1, exist = 0, failed = 1, reasons = { ["synthetic reason"] = 1 } })
+  local fs = { read = read, exists = function(p) return files[p] ~= nil end }
+  local fresh, nknown = plan.fresh(fs, "/none.ini", named, known)
+  A.eq({ fresh, nknown }, { { { "Good", "/v/Good.x" } }, 1 })
+  files["/v/Bad.x"] = "not a preset!"
+  A.eq(convert.dry_run(named, nil, known).new, 2, "a changed file counts as new")
+  files["/v/Bad.x"] = "fine"
+  local fixed = convert.new_job(adapter, {}, named)
+  convert.step(fixed, read)
+  A.eq(failed.record(again, fixed), true)
+  A.eq(again.files["/v/Bad.x"], nil, "a file that converts is forgotten")
+end
+
+T["known failures: a name REAPER has counts as existing; other versions' stores are ignored"] = function()
+  local store = { files = { ["/v/A.x"] = { size = 1, adler32 = select(2, failed.fingerprint("a")), reason = "r" } } }
+  local known = failed.checker(store, function() return "a" end)
+  local existing = require("reaporter.core.ini").ini_bytes({ { "A", "\1" } })
+  A.eq(convert.dry_run({ { "A", "/v/A.x" } }, existing, known), { found = 1, new = 0, exist = 1 })
+  A.eq(failed.decode('{"reaporter": "0.0.1", "failed": {"/v/A.x": {"size": 1, "adler32": 98, "reason": "r"}}}').files, {})
+  A.eq(failed.decode("not json").files, {})
+  A.eq(failed.summary({ x = 1, y = 3 }), "3 x y\n1 x x")
 end
 
 return T

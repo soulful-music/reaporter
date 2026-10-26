@@ -53,6 +53,12 @@ What it guarantees:
 - **One bad preset doesn't stop the rest.** A file that fails to convert is listed with the
   reason; the other presets of that plugin and the other plugins carry on.
 
+A preset that failed to convert is remembered (its path, size and checksum, in
+`<resource>/presets/ReaPorter-failed.json`). The next scan counts it under "Can't convert",
+with the reason on hover, not as new, and Convert does not try it again. A file that changes,
+or a new ReaPorter version, gets tried again. A plugin whose only presets left are ones that
+can't convert shows 0 new and is not ticked.
+
 Preset names are the file names. When two files share a name, the folder is added:
 `Big Hall (Vocals)`.
 

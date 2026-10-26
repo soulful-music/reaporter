@@ -1,5 +1,6 @@
 -- Scan, dry run and conversion of vendor presets into REAPER preset files: everything
 -- between the adapters and the REAPER glue. Pure Lua 5.4; file access is injected.
+local failed = require("reaporter.core.failed")
 local ini = require("reaporter.core.ini")
 local plugin_list = require("reaporter.core.plugin_list")
 local scan = require("reaporter.core.scan")
@@ -72,8 +73,10 @@ function M.presets(plugin, fs)
 end
 
 -- Dry-run counts against the plugin's preset file now on disk (nil when there is none):
--- {found, new, exist} or {found, error} when the file cannot be merged.
-function M.dry_run(named, existing)
+-- {found, new, exist} or {found, error} when the file cannot be merged. known(path) ->
+-- reason for a file known not to convert (core/failed.lua): such files are counted in
+-- `failed`, with reasons[reason] = count, not in `new` (both fields only when there are any).
+function M.dry_run(named, existing, known)
   local counts = { found = #named, new = 0, exist = 0 }
   local taken = {}
   if existing and existing ~= "" then
@@ -86,8 +89,13 @@ function M.dry_run(named, existing)
   end
   for _, e in ipairs(named) do
     local k = ini.name_key(e[1])
+    local why = not taken[k] and known and known(e[2])
     if taken[k] then
       counts.exist = counts.exist + 1
+    elseif why then
+      counts.failed = (counts.failed or 0) + 1
+      counts.reasons = counts.reasons or {}
+      counts.reasons[why] = (counts.reasons[why] or 0) + 1
     else
       taken[k] = true
       counts.new = counts.new + 1
@@ -102,8 +110,8 @@ function M.new_job(adapter, plugin, named)
 end
 
 -- Convert presets until `more()` returns false or none are left; returns true when done.
--- read(path) -> bytes or nil, reason. A preset that fails is recorded with its reason and
--- the rest carry on.
+-- read(path) -> bytes or nil, reason. A preset that fails is recorded with its reason
+-- (and the file's {size, adler32} when it was read) and the rest carry on.
 function M.step(job, read, more)
   while job.next <= #job.named do
     local name, path = job.named[job.next][1], job.named[job.next][2]
@@ -116,7 +124,8 @@ function M.step(job, read, more)
       if ok and type(chunk) == "string" then
         job.ok[#job.ok + 1] = { name, path, chunk }
       else
-        job.failed[#job.failed + 1] = { path, ok and "adapter returned no state" or tostring(chunk) }
+        job.failed[#job.failed + 1] = { path, ok and "adapter returned no state" or tostring(chunk),
+          { failed.fingerprint(bytes) } }
       end
     end
     if more and not more() then break end
