@@ -133,7 +133,8 @@ end
 T["preset folders per OS"] = function()
   local env = { USERPROFILE = "C:\\Users\\me", APPDATA = "C:\\Users\\me\\AppData\\Roaming", ProgramData = "C:\\ProgramData" }
   local w = convert.dirs("Win64", "C:\\Users\\me", function(k) return env[k] end)
-  A.eq(w, { common = "C:/ProgramData", user = "C:/Users/me/AppData/Roaming", music = "C:/Users/me/Music", shared = "C:/Users/Public" })
+  A.eq(w, { common = "C:/ProgramData", user = "C:/Users/me/AppData/Roaming", music = "C:/Users/me/Music", shared = "C:/Users/Public",
+    documents = "C:/Users/me/Documents" })
   local m = convert.dirs("macOS-arm64", "/Users/me")
   A.eq(m.user, "/Users/me/Library/Application Support")
 end

@@ -22,6 +22,7 @@ function M.dirs(os_name, home, getenv)
       common = slashes(getenv("ProgramData")) or "C:/ProgramData",
       user = slashes(getenv("APPDATA")) or (profile .. "/AppData/Roaming"),
       music = profile .. "/Music",
+      documents = profile .. "/Documents",
       shared = slashes(getenv("PUBLIC")) or "C:/Users/Public",
     }
   elseif os_name:find("OSX") or os_name:find("mac") then
@@ -29,6 +30,7 @@ function M.dirs(os_name, home, getenv)
       common = "/Library/Application Support",
       user = home .. "/Library/Application Support",
       music = home .. "/Music",
+      documents = home .. "/Documents",
       shared = "/Users/Shared",
     }
   end
@@ -36,14 +38,15 @@ function M.dirs(os_name, home, getenv)
     common = "/opt",
     user = home .. "/.config",
     music = home .. "/Music",
+    documents = home .. "/Documents",
     shared = "/usr/share",
   }
 end
 
 -- Every adapter's plugins, matched against REAPER's VST3 list. Returns
 -- {{adapter, plugins = {plugin...}}, ...}; each plugin gains `listing` (REAPER's uid,
--- fx_id, name), `ini_name` and `problem` (why it cannot convert, or nil). `pins` is the
--- adapter's own.
+-- fx_id, name), `ini_name` (the adapter's when it sets one) and `problem` (why it cannot
+-- convert, or nil). `pins` is the adapter's own.
 -- env = {os, dirs, fs, vst3}
 function M.discover(adapters, env)
   local out = {}
@@ -52,7 +55,7 @@ function M.discover(adapters, env)
     local group = { adapter = adapter, plugins = {}, error = not ok and tostring(list) or nil }
     for _, plugin in ipairs(ok and list or {}) do
       plugin.vendor = adapter.vendor
-      plugin.ini_name = ini.preset_file_name(plugin.fx_name)
+      plugin.ini_name = plugin.ini_name or ini.preset_file_name(plugin.fx_name)
       plugin.listing = plugin_list.lookup(env.vst3 or {}, plugin.bundle)
       if not plugin.listing then
         plugin.problem = "not installed in REAPER (VST3)"

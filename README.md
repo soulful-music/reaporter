@@ -84,13 +84,19 @@ REAPER's id for it.
 |---|---|---|
 | DMGAudio | Multiplicity, Expurgate, Essence (not Multiplicity's band presets) | `.MultiplicityPreset`, `.exp`, `.ess` |
 | Eventide | every plugin with a folder in `~/Music/Eventide` (Blackhole, H3000, SP2016, UltraReverb, ...) | `.tide`, `.tidex` |
+| FabFilter | Micro, Pro-C 2, Pro-DS, Pro-G, Pro-L, Pro-L 2, Pro-MB, Pro-Q 2, Pro-Q 3, Pro-Q 4, Pro-R, Pro-R 2, Saturn, Saturn 2, Simplon, Timeless 2, Timeless 3, Twin 2, Twin 3, Volcano 2, Volcano 3 (presets in the plugin's current layout and the older layouts listed in FORMATS.md) | `.ffp` |
 | LiquidSonics | Cinematic Rooms Professional, Lustrous Plates Surround | `.crp_preset`, `.lp_preset` |
 | Relab | LX480 v4 (v4 presets; the legacy layout is listed as failed) | `.lx480` |
 | Reverb Foundry | Tai Chi | `.taichi_preset` |
 | Soundtoys | every Soundtoys 5 plugin with a preset folder | `.toy` |
 | Valhalla DSP | every plugin with a `Presets` folder (VintageVerb, Supermassive, Delay, Plate, ...) | `.vpreset` |
 
-Not covered: encrypted presets (LiquidSonics Illusion and Seventh Heaven, Reverb Foundry HD
+Not covered: FabFilter One, and FabFilter presets in a layout the plugin migrates itself when
+it opens the file: an older plugin's presets in a newer one's folder (Pro-Q 3 in Pro-Q 4,
+Pro-R in Pro-R 2, Twin in Twin 2, Volcano in Volcano 2, ...) and older layouts of Saturn,
+Saturn 2, Timeless 2, Timeless 3, Twin 2, Twin 3, Volcano 2 and Volcano 3. They are listed as
+"can't convert" with the layout (about 30% of one FabFilter library). Also
+encrypted presets (LiquidSonics Illusion and Seventh Heaven, Reverb Foundry HD
 Cart), Eventide presets with non-numeric parameters (some Physion Mk II), AU and VST2.
 
 How each format converts: [FORMATS.md](FORMATS.md).

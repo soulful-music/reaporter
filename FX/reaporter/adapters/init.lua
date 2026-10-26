@@ -3,6 +3,7 @@
 return {
   (require("reaporter.adapters.dmgaudio")),
   (require("reaporter.adapters.eventide")),
+  (require("reaporter.adapters.fabfilter")),
   (require("reaporter.adapters.liquidsonics")),
   (require("reaporter.adapters.relab")),
   (require("reaporter.adapters.reverb_foundry")),

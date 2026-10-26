@@ -2,9 +2,10 @@
 -- @author Toms
 -- @version 1.0.0
 -- @changelog
---   First release. Converts the presets of Eventide, LiquidSonics, Relab (LX480 v4),
---   Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that are already on
---   this computer into REAPER user presets, with a backup of every preset file it changes.
+--   First release. Converts the presets of DMGAudio, Eventide, FabFilter, LiquidSonics,
+--   Relab (LX480 v4), Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that
+--   are already on this computer into REAPER user presets, with a backup of every preset
+--   file it changes.
 -- @about
 --   # ReaPorter
 --
@@ -21,6 +22,7 @@
 --   [nomain] reaporter/adapters/dmgaudio.lua
 --   [nomain] reaporter/adapters/dmgaudio_fresh.lua
 --   [nomain] reaporter/adapters/eventide.lua
+--   [nomain] reaporter/adapters/fabfilter.lua
 --   [nomain] reaporter/adapters/init.lua
 --   [nomain] reaporter/adapters/liquidsonics.lua
 --   [nomain] reaporter/adapters/relab.lua

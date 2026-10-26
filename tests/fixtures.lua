@@ -125,4 +125,30 @@ M.DMG_FRESH = '{"presets": [{"parameters": "default", "name": "None"}], '
   .. '"ab": [{"parameters": "default"}, {"parameters": "default"}], '
   .. '"settings": {"currentAB": 0, "zoomLevel": 3}, "uiprefs": {"w": 100}, "v101": true}'
 
+-- A FabFilter-style binary preset: magic, version, count, floats, then `tail` (a CuSV block).
+function M.ffp(magic, version, floats, tail)
+  local parts = { magic, string.pack("<I4<I4", version, #floats) }
+  for _, v in ipairs(floats) do parts[#parts + 1] = string.pack("<f", v) end
+  return table.concat(parts) .. (tail or "")
+end
+
+-- A CuSV block: {{key, value}, ...}.
+function M.cusv(items)
+  local parts = { "CuSV", string.pack("<I4<I4", 1, #items) }
+  for _, kv in ipairs(items) do
+    parts[#parts + 1] = string.pack("<I4", #kv[1]) .. kv[1] .. string.pack("<I4", #kv[2]) .. kv[2]
+  end
+  return table.concat(parts)
+end
+
+-- A FabFilter-style text preset: [Preset] head lines, then [Parameters] P1..Pn = values.
+function M.ffp_text(head, values)
+  local lines = { "[Preset]" }
+  for _, kv in ipairs(head) do lines[#lines + 1] = kv[1] .. "=" .. kv[2] end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "[Parameters]"
+  for i, v in ipairs(values) do lines[#lines + 1] = ("Synthetic %d=%s"):format(i, v) end
+  return table.concat(lines, "\n") .. "\n"
+end
+
 return M

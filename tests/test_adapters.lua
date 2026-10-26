@@ -5,6 +5,7 @@ local registry = require("reaporter.adapters")
 
 local dmgaudio = require("reaporter.adapters.dmgaudio")
 local eventide = require("reaporter.adapters.eventide")
+local fabfilter = require("reaporter.adapters.fabfilter")
 local json = require("reaporter.codec.json")
 local zlib = require("reaporter.codec.zlib")
 local liquidsonics = require("reaporter.adapters.liquidsonics")
@@ -32,11 +33,11 @@ end
 
 T["registry: every adapter honours the contract"] = function()
   local env = {
-    dirs = { common = "/c", user = "/u", music = "/m", shared = "/s" },
+    dirs = { common = "/c", user = "/u", music = "/m", shared = "/s", documents = "/d" },
     fs = F.memfs("/", {}),
     vst3 = {},
   }
-  A.eq(#registry, 7)
+  A.eq(#registry, 8)
   local keys = {}
   for _, a in ipairs(registry) do
     A.truthy(type(a.vendor) == "string" and type(a.key) == "string", "vendor and key")
@@ -44,7 +45,7 @@ T["registry: every adapter honours the contract"] = function()
     A.truthy(not keys[a.key], "unique key " .. a.key)
     keys[a.key] = true
     for _, p in ipairs(a.plugins(env)) do
-      A.truthy(p.fx_name:find("^VST3: ") and p.bundle and #p.roots > 0 and #p.exts > 0, p.fx_name)
+      A.truthy(p.fx_name:find("^VST3i?: ") and p.bundle and #p.roots > 0 and #p.exts > 0, p.fx_name)
       A.truthy(p.pins == nil or (#p.pins == 2 and math.type(p.pins[1]) == "integer"
         and math.type(p.pins[2]) == "integer"), "pins of " .. p.fx_name)
     end
@@ -271,6 +272,90 @@ T["dmgaudio: files that are not a preset fail"] = function()
   A.raises(function() dmgaudio.to_state(F.dmg("[1]"), "x", plugin) end, "not a JSON object")
   A.raises(function() dmgaudio.to_state("ZIP garbage", "x", plugin) end, "zlib")
   A.raises(function() dmgaudio.to_state(F.dmg("{}"), "x", {}) end, "fresh")
+end
+
+local function ff_plugin(folder)
+  for _, p in ipairs(fabfilter.plugins({ dirs = { documents = "/d" } })) do
+    if p.folder == folder then return p end
+  end
+end
+
+local function seq(n, f)
+  local out = {}
+  for i = 1, n do out[i] = f(i) end
+  return out
+end
+
+T["fabfilter: plugins name REAPER's preset file and bundle; instruments are VST3i"] = function()
+  local q3 = ff_plugin("Pro-Q 3")
+  A.eq({ q3.fx_name, q3.bundle, q3.ini_name, q3.roots, q3.pins },
+    { "VST3: Pro-Q 3 (FabFilter)", "FabFilter Pro Q 3", "vst3-FabFilter Pro-Q 3.ini", { "/d/FabFilter/Presets/Pro-Q 3" }, { 4, 2 } })
+  A.eq(ff_plugin("Twin 3").fx_name, "VST3i: Twin 3 (FabFilter)")
+  local listed = require("reaporter.core.plugin_list").parse(
+    "FabFilter_Pro_Q_3.vst3=00,5{00000000000000000000000000000000,Pro-Q 3 (FabFilter)\n")
+  A.eq(require("reaporter.core.plugin_list").lookup(listed, q3.bundle).fx_name, q3.fx_name)
+end
+
+T["fabfilter: an older-container preset keeps its floats, its count and its name"] = function()
+  local plugin = ff_plugin("Pro-L 2")
+  local floats = seq(31, function(i) return i / 8 end)
+  local file = F.ffp("FL2p", 2, floats)
+  local chunk = fabfilter.to_state(file, "/d/FabFilter/Presets/Pro-L 2/Sub/Synthetic Name.ffp", plugin)
+  local n = string.unpack("<I4", chunk)
+  local comp, ctrl = chunk:sub(9, 8 + n), chunk:sub(9 + n)
+  A.eq(string.unpack("<I4", chunk, 5), 1)
+  A.eq(comp, "FabF" .. string.pack("<I4<I4", 2, 14) .. "Synthetic Name" .. string.pack("<I4<I4", 0, 31)
+    .. file:sub(13) .. string.pack("<I4<I4", 1, 1))
+  A.eq(ctrl, string.pack("<I4<I4", 12, 0) .. "FFed" .. string.pack("<I4<I4", 0, 0))
+end
+
+T["fabfilter: a newer-container preset carries its CuSV block, without the bytes after it"] = function()
+  local plugin = ff_plugin("Timeless 3")
+  local cusv = F.cusv({ { "XY1", "Synthetic Mod" }, { "EF1", "" } })
+  local file = F.ffp("F3Ts", 10, seq(1007, function(i) return -i end), cusv .. "junk")
+  local chunk = fabfilter.to_state(file, "/x/Synthetic.ffp", plugin)
+  local n = string.unpack("<I4", chunk)
+  local comp, ctrl = chunk:sub(9, 8 + n), chunk:sub(9 + n)
+  A.eq(comp, "FFBS" .. string.pack("<I4<I4", 1, 1007) .. file:sub(13, 12 + 4 * 1007) .. "FFpr" .. string.pack("<I4<I4", 1, 0))
+  local body = "F3Ts" .. string.pack("<I4<I4", 3, 9) .. "Synthetic" .. string.pack("<i4<I4<I4<I4", -1, 1, 0, 0)
+    .. cusv .. "FFed" .. string.pack("<I4<I4", 0, 0)
+  A.eq(ctrl, string.pack("<I4<I4", #body, 0) .. body)
+end
+
+T["fabfilter: a text preset gives the same floats and its author, description and tags"] = function()
+  local plugin = ff_plugin("Pro-R 2")
+  local values = seq(136, function(i) return ("%d.5"):format(i) end)
+  values[3], values[4] = "-1.25e-05", "7"
+  local file = F.ffp_text({ { "Signature", "FR2p" }, { "Version", "6" }, { "Author", "Synthetic Author" },
+    { "Description", '"Line one\\nLine two = more"' }, { "Tags", "a,b" } }, values)
+  local chunk = fabfilter.to_state(file, "/x/Text One.ffp", plugin)
+  local n = string.unpack("<I4", chunk)
+  local comp, ctrl = chunk:sub(9, 8 + n), chunk:sub(9 + n)
+  local floats = {}
+  for i, v in ipairs(values) do floats[i] = string.pack("<f", tonumber(v)) end
+  A.eq(comp:sub(13, 12 + 4 * 136), table.concat(floats))
+  local cusv = F.cusv({ { "AUTHOR", "Synthetic Author" }, { "DESCRIPTION", "Line one\nLine two = more" }, { "TAGS", "a,b" } })
+  A.truthy(ctrl:find(cusv, 1, true), "CuSV from the [Preset] lines")
+  A.truthy(ctrl:find(string.pack("<I4", 8) .. "Text One", 1, true), "the name")
+end
+
+T["fabfilter: other layouts, versions and malformed files fail with the reason"] = function()
+  local q4 = ff_plugin("Pro-Q 4")
+  A.raises(function() fabfilter.to_state(F.ffp("FQ3p", 4, seq(358, function() return 0 end)), "/x/a.ffp", q4) end,
+    "another plugin's preset layout (FQ3p)")
+  local sat = ff_plugin("Saturn")
+  A.raises(function() fabfilter.to_state(F.ffp("FSat", 2, seq(768, function() return 0 end)), "/x/a.ffp", sat) end,
+    "version 2 with 768 values")
+  A.raises(function() fabfilter.to_state(F.ffp("FSat", 4, seq(900, function() return 0 end)), "/x/a.ffp", sat) end,
+    "version 4 with 900 values")
+  A.raises(function() fabfilter.to_state(("FSat" .. string.pack("<I4<I4", 4, 893)) .. "short", "/x/a.ffp", sat) end,
+    "do not fit")
+  A.raises(function() fabfilter.to_state(F.ffp("FSat", 4, seq(893, function() return 0 end), "CuSV\1\0\0\0\1\0\0\0\9\0\0\0ab"), "/x/a.ffp", sat) end,
+    "truncated")
+  A.raises(function() fabfilter.to_state(F.ffp_text({ { "Signature", "FQ4p" }, { "Version", "4" } }, { "1", "nan" }), "/x/a.ffp", q4) end,
+    "not a number")
+  A.raises(function() fabfilter.to_state(F.ffp_text({ { "Signature", "FQ4p" }, { "Version", "4" } }, { "1", "2" }), "/x/a.ffp", q4) end,
+    "version 4 with 2 values")
 end
 
 return T

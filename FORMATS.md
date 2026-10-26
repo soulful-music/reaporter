@@ -11,7 +11,7 @@ All integers are little-endian unless marked "BE". Offsets are in bytes.
 - [REAPER `vst_chunk` for a VST3](#reaper-vst_chunk-for-a-vst3)
 - [JUCE ValueTree (binary)](#juce-valuetree-binary)
 - [zlib](#zlib)
-- [DMGAudio](#dmgaudio) · [LiquidSonics](#liquidsonics) · [Reverb Foundry](#reverb-foundry) · [Eventide](#eventide) ·
+- [DMGAudio](#dmgaudio) · [FabFilter](#fabfilter) · [LiquidSonics](#liquidsonics) · [Reverb Foundry](#reverb-foundry) · [Eventide](#eventide) ·
   [Relab](#relab) · [Soundtoys](#soundtoys) · [Valhalla DSP](#valhalla-dsp)
 - [Not covered](#not-covered)
 
@@ -169,6 +169,99 @@ parameter readout keeps its old values after any DMGAudio state load, REAPER's o
 All three have 4 inputs (main plus sidechain), 2 outputs. `Multiplicity/BandPresets` (`.mpb`)
 hold one band, not a plugin state, and are not converted.
 
+## FabFilter
+
+Presets in `~/Documents/FabFilter/Presets/<plugin>/` (`.ffp`). REAPER lists the VST3 as
+`Pro-Q 3 (FabFilter)` but names its preset file after the VST3 class name:
+`vst3-FabFilter Pro-Q 3.ini`. Twin 2, Twin 3 and One are instruments (`VST3i:`).
+
+**Binary preset:**
+
+```
+magic (4 bytes, per plugin: "FQ3p" Pro-Q 3, "FL2p" Pro-L 2, ...)
+u32  version
+u32  count
+count x f32    the plugin's parameters, in its VST3 parameter order
+CuSV block     newer plugins only (below); some files have stray bytes after it
+```
+
+**Text preset** (Pro-Q 4, Pro-R 2): `[Preset]` with `Signature` (the magic), `Version`,
+`Author`, `Description` (quoted, `\n` for a line break), `Tags`, then `[Parameters]` with one
+`name=value` line per parameter: the same floats, in the same order.
+
+**CuSV block:** `"CuSV"`, `u32 1`, `u32 n`, then n pairs of strings (`u32 length`, bytes):
+modulation-source names, author, description, tags.
+
+The plugin state holds the same floats. It carries no version, so the plugin reads them in
+its current layout. There are two containers.
+
+Older plugins (Micro, Pro-C 2, Pro-DS, Pro-G, Pro-L, Pro-L 2, Pro-MB, Pro-Q 2, Pro-R,
+Saturn, Simplon, Timeless 2, Twin 2, Volcano 2):
+
+```
+component   "FabF" u32 2  u32 len, preset name  u32 0  u32 count  floats  u32 1  u32 1
+controller  u32 12  u32 0  "FFed" u32 0 u32 0
+```
+
+Newer plugins (Pro-Q 3, Pro-Q 4, Pro-R 2, Saturn 2, Timeless 3, Twin 3, Volcano 3):
+
+```
+component   "FFBS" u32 1  u32 count  floats  "FFpr" u32 1  u32 0
+controller  u32 length of the rest  u32 0
+            magic  u32 3  u32 len, preset name  i32 -1  u32 1
+            u32 len, instance name ("Pro-Q" for Pro-Q 3 and 4, else empty)  u32 0
+            CuSV block (the file's, or built from a text preset's Author / Description /
+            Tags as AUTHOR / DESCRIPTION / TAGS; an empty one: "CuSV" u32 1 u32 0)
+            "FFed" u32 0 u32 0
+```
+
+A state with fewer floats than the plugin has is filled with the defaults of the remaining
+parameters, the same as the plugin does when it opens such a file itself. A new
+instance loads `Default Setting.ffp` and its state was compared with that file: for Pro-MB,
+Pro-Q 2, Pro-Q 3, Saturn, Simplon and Pro-L 2 the file has fewer values than the plugin,
+and the state is the file's values followed by defaults. Built this way from the file, the
+state is the same bytes as the fresh instance's for eleven plugins. Pro-Q 4, Pro-L 2 and
+Twin 3 differ only in parameters a new instance keeps from the plugin itself (Spectrum Grab,
+Show Advanced, Meter Scale, Arpeggiator Lock).
+
+**What converts:** a file whose magic is the plugin's and whose version and count are
+a layout measured to load as is:
+
+| Plugin | Version / values |
+|---|---|
+| Micro | 1 / 8 |
+| Pro-C 2 | 2 / 46 |
+| Pro-DS | 2 / 20 |
+| Pro-G | 2 / 34 |
+| Pro-L | 3 / 19 |
+| Pro-L 2 | 2 / 31, 2 / 32 |
+| Pro-MB | 3 / 150, 3 / 151 |
+| Pro-Q 2 | 2 / 189, 2 / 190 |
+| Pro-Q 3 | 4 / 334, 4 / 358 |
+| Pro-Q 4 | 4 / 576 |
+| Pro-R | 4 / 85 |
+| Pro-R 2 | 6 / 136 |
+| Saturn | 4 / 893, 4 / 899 |
+| Saturn 2 | 4 / 951 |
+| Simplon | 1 / 17, 1 / 18 |
+| Timeless 2 | 4 / 705, 5 / 705 |
+| Timeless 3 | 10 / 1007 |
+| Twin 2 | 8 / 883 |
+| Twin 3 | 18 / 1288 |
+| Volcano 2 | 2 / 709 |
+| Volcano 3 | 5 / 896 |
+
+Timeless 2 version 4 files and FabFilter's own version 5 saves of the same presets hold the
+same floats. Other versions are migrated by the plugin when it opens the file. The state has
+no version, so they are not converted. Twin 3 version 17 has 1292 values against 1288 now, so
+its layout changed, not only grew.
+
+Files of another plugin's layout in a newer plugin's folder (Pro-Q 3 presets in Pro-Q 4,
+Pro-R in Pro-R 2, Twin in Twin 2, Volcano in Volcano 2, Saturn in Saturn 2, Timeless in
+Timeless 2) are not converted. Measured: a Pro-Q 3 preset's floats in a Pro-Q 4 state give
+other values than Pro-Q 4's own version of that preset, whichever magic the controller names.
+One's `FFPr` files hold another parameter set than its state.
+
 ## LiquidSonics
 
 Cinematic Rooms Professional (`.crp_preset`), Lustrous Plates Surround (`.lp_preset`).
@@ -303,6 +396,8 @@ character references; single quotes around a value that holds a double quote).
 
 ## Not covered
 
+- **FabFilter** layouts other than those in the table, files of an older plugin in a newer
+  one's folder, and FabFilter One (see [FabFilter](#fabfilter)).
 - **Encrypted presets**: LiquidSonics Illusion and Seventh Heaven, Reverb Foundry HD Cart.
   Their plugin state is encrypted too, with a fresh IV per save.
 - **Eventide `.tidex` with non-numeric parameter values** (Physion Mk II, some presets).
