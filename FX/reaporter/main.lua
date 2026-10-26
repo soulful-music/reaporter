@@ -263,7 +263,7 @@ local function finish_plugin(p, job)
       local side_path = SIDECARS .. "/" .. p.ini_name .. ".json"
       local old = fs.read(side_path)
       local bytes, stats = convert.sidecar(p.group.adapter, p, p.named, merged, old, fs.read)
-      if bytes ~= old then
+      if bytes ~= old and (old or stats.imported > 0) then
         reaper.RecursiveCreateDirectory(native(SIDECARS), 0)
         write_atomic(side_path, bytes)
       end
