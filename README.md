@@ -7,6 +7,8 @@ SWS, OSC and control surfaces.
 
 It reads only what is already on your machine and ships no presets.
 
+![ReaPorter scanning, ticking plugins and converting their presets](docs/reaporter-convert.gif)
+
 ## Install
 
 ReaPorter needs [ReaImGui](https://forum.cockos.com/showthread.php?t=250419) (0.10 or newer),
