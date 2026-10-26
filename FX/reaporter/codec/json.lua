@@ -4,7 +4,9 @@
 -- arrays to plain sequences. Integers stay Lua integers, numbers with a fraction or an
 -- exponent become floats. NaN / Infinity / -Infinity are accepted. The writer emits
 -- sorted keys, one-space indent, raw UTF-8 and the shortest float repr that round-trips,
--- the layout the MixSurface sidecar uses (SIDECAR.md).
+-- the layout the MixSurface sidecar uses (SIDECAR.md). Objects also remember their key
+-- order (json.keys, json.set, json.remove) for encode_python, which writes what Python's
+-- json.dumps(v, indent=...) writes.
 local M = {}
 
 M.OBJECT = setmetatable({}, { __name = "json.object" })
@@ -13,6 +15,52 @@ M.null = setmetatable({}, { __name = "json.null", __tostring = function() return
 
 function M.object(t)
   return setmetatable(t or {}, OBJ_MT)
+end
+
+-- Key order of decoded objects, and of objects changed through set / remove.
+local ORDER = setmetatable({}, { __mode = "k" })
+
+-- An object's keys in insertion order (keys set without json.set follow, sorted).
+function M.keys(obj)
+  local out, seen = {}, {}
+  for _, k in ipairs(ORDER[obj] or {}) do
+    if obj[k] ~= nil and not seen[k] then
+      out[#out + 1] = k
+      seen[k] = true
+    end
+  end
+  local rest = {}
+  for k in pairs(obj) do
+    if not seen[k] then rest[#rest + 1] = k end
+  end
+  table.sort(rest)
+  for _, k in ipairs(rest) do out[#out + 1] = k end
+  return out
+end
+
+-- obj[k] = v; a new key goes last, an existing one keeps its place (as a Python dict).
+function M.set(obj, k, v)
+  if obj[k] == nil then
+    local o = ORDER[obj]
+    if not o then
+      o = M.keys(obj)
+      ORDER[obj] = o
+    end
+    o[#o + 1] = k
+  end
+  obj[k] = v
+end
+
+function M.remove(obj, k)
+  local v = obj[k]
+  obj[k] = nil
+  local o = ORDER[obj]
+  if o and v ~= nil then
+    for i = #o, 1, -1 do
+      if o[i] == k then table.remove(o, i) end
+    end
+  end
+  return v
 end
 
 function M.is_object(t)
@@ -87,7 +135,8 @@ local function parse_number(s, i)
   local text = s:sub(i, j - 1)
   local v
   if is_float then
-    v = tonumber(text) + 0.0
+    v = tonumber(text)
+    if math.type(v) ~= "float" then v = v + 0.0 end -- not `+ 0.0` always: it turns -0.0 into 0.0
   else
     v = math.tointeger(tonumber(text)) or tonumber(text)
   end
@@ -106,7 +155,7 @@ local function parse_object(s, i)
     if s:sub(i, i) ~= ":" then fail("expecting ':'", i) end
     local v
     v, i = parse_value(s, skip(s, i + 1))
-    obj[key] = v
+    M.set(obj, key, v)
     i = skip(s, i)
     local c = s:sub(i, i)
     if c == "}" then return obj, i + 1 end
@@ -246,6 +295,71 @@ end
 function M.encode(v)
   local out = {}
   encode(v, 0, out)
+  return table.concat(out)
+end
+
+-- Python's ensure_ascii escaping: \uXXXX (lower-case hex, UTF-16) outside printable ASCII.
+local function py_string(s)
+  return '"' .. s:gsub('[\0-\31"\\\127-\255][\128-\191]*', function(c)
+    if c == '"' then return '\\"' end
+    if c == "\\" then return "\\\\" end
+    if c == "\n" then return "\\n" end
+    if c == "\r" then return "\\r" end
+    if c == "\t" then return "\\t" end
+    if c == "\b" then return "\\b" end
+    if c == "\f" then return "\\f" end
+    local out = {}
+    for _, cp in utf8.codes(c) do
+      if cp >= 0x10000 then
+        cp = cp - 0x10000
+        out[#out + 1] = ("\\u%04x\\u%04x"):format(0xD800 | (cp >> 10), 0xDC00 | (cp & 0x3FF))
+      else
+        out[#out + 1] = ("\\u%04x"):format(cp)
+      end
+    end
+    return table.concat(out)
+  end) .. '"'
+end
+
+local function encode_py(v, indent, depth, out)
+  local t = type(v)
+  if v == M.null or v == nil then
+    out[#out + 1] = "null"
+  elseif t == "boolean" then
+    out[#out + 1] = v and "true" or "false"
+  elseif t == "number" then
+    out[#out + 1] = math.type(v) == "integer" and ("%d"):format(v) or M.float_repr(v)
+  elseif t == "string" then
+    out[#out + 1] = py_string(v)
+  elseif t == "table" then
+    local pad = "\n" .. indent:rep(depth + 1)
+    local obj = M.is_object(v)
+    local keys = obj and M.keys(v) or nil
+    local n = obj and #keys or #v
+    if n == 0 then
+      out[#out + 1] = obj and "{}" or "[]"
+      return
+    end
+    out[#out + 1] = obj and "{" or "["
+    for i = 1, n do
+      out[#out + 1] = (i > 1 and "," or "") .. pad
+      if obj then
+        out[#out + 1] = py_string(keys[i]) .. ": "
+        encode_py(v[keys[i]], indent, depth + 1, out)
+      else
+        encode_py(v[i], indent, depth + 1, out)
+      end
+    end
+    out[#out + 1] = "\n" .. indent:rep(depth) .. (obj and "}" or "]")
+  else
+    error("JSON: cannot encode a " .. t, 0)
+  end
+end
+
+-- What Python's json.dumps(v, indent=indent) writes: keys in their order, ensure_ascii.
+function M.encode_python(v, indent)
+  local out = {}
+  encode_py(v, indent, 0, out)
   return table.concat(out)
 end
 

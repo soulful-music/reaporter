@@ -3,6 +3,7 @@ local json = require("reaporter.codec.json")
 local juce = require("reaporter.codec.juce")
 local text = require("reaporter.core.text")
 local xml = require("reaporter.codec.xml")
+local zlib = require("reaporter.codec.zlib")
 
 local T = {}
 
@@ -151,6 +152,56 @@ T["juce: version codes"] = function()
   A.eq(juce.version_int("0"), 0)
   A.eq(juce.version_int("1.2.3.4"), 0x010203)
   A.raises(function() juce.version_int("1.x") end, "integer")
+end
+
+local function unhex(h) return (h:gsub("%x%x", function(x) return string.char(tonumber(x, 16)) end)) end
+
+T["zlib: inflate fixed and dynamic Huffman blocks"] = function()
+  A.eq(zlib.inflate(unhex("78da4b4c4a4e44421100340c0617")), "abcabcabcabcabcX")
+  local dyn = zlib.inflate(unhex("78da8555cb4e03310cfc95a86784b870e16fb61051d416aaed82842cff3b224ee2f124854b36f22be3f163f7795bd265cdd7bca5d7e57c5ed2eeb87b4a0ff78f7769cdcbe563ddf29aaedfefdb216f6fcf49e0befff5553093f4b59c3ef3d4d182dbe952b3c7f066e11174b076807ed3e0a14314c6252de7e5743934585584296a351078ab9aa19182da9e2adccc698b58cdfc259f36a4bef150c29852ebb7880c95f9563c4ca543073fbb9a02991d2b50a3eea13fcc99a975d01844cdd30fa534666f1b2ee6c2f5fea85962fdfd8e39724b17281e0698a9392229a6e526b2c08174ec6dce6ec29dc41851087577d8260ce51e5e0888b81d39658dfd6fa71b11b25a400d4c49207db6356e35f57832e79c39d7805782790dcc0c0b6ad64a3a9bfb3f3ced458d63e2808dcaea0f3337eb77d38ca7c5182a4cf0705a7a0acc9450cd7005f210f12046df726f41a529b9d1da42c3c14049d8460e86271b796881814c5f2bb77f25d819b09351aca1c4dc7a949f479ec930d35092e906623fdc0eb706bb7e8621d5017857e83ca7de0c3206fd6faf87acb0b05c415c96126bd8846182dc1fea8c0b5efa3aeaf821112e63e760e02b7e5a23608e04051798f4069e3b2023bc54d1c362c8540b2dae65cb4a0858d43fbda16850"))
+  A.eq(#dyn, 2487)
+  A.eq(dyn:sub(1, 12), "beta preset ")
+end
+
+T["zlib: stored blocks round-trip, also past one block"] = function()
+  for _, s in ipairs({ "", "x", ("0123456789"):rep(7000) }) do
+    A.eq(zlib.inflate(zlib.store(s)), s)
+  end
+  A.eq(zlib.store("a"), "\x78\x01\x01\x01\x00\xfe\xff" .. "a" .. "\x00\x62\x00\x62")
+  A.eq(#zlib.store(("x"):rep(70000)), 2 + 2 * 5 + 70000 + 4)
+end
+
+T["zlib: bad streams raise"] = function()
+  A.raises(function() zlib.inflate("\x78\x02") end, "header")
+  local z = zlib.store("hello")
+  A.raises(function() zlib.inflate(z:sub(1, -2) .. "\0") end, "data check")
+  A.raises(function() zlib.inflate(z:sub(1, 6)) end, "end of data")
+  A.eq(zlib.inflate(z .. "trailing"), "hello")
+end
+
+T["json: objects keep their key order; set and remove as a Python dict"] = function()
+  local o = json.decode('{"b": 1, "a": 2, "b": 3}')
+  A.eq(json.keys(o), { "b", "a" })
+  A.eq(o.b, 3)
+  json.set(o, "c", 4)
+  json.set(o, "b", 5)
+  json.remove(o, "a")
+  json.set(o, "a", 6)
+  A.eq(json.keys(o), { "b", "c", "a" })
+end
+
+T["json: encode_python writes json.dumps(indent=...)"] = function()
+  local o = json.decode('{"z": [], "y": {}, "s": "\\u00e9\\u007f\\u0001\\"\\\\/\\n\\ud83d\\ude00", '
+    .. '"n": [1, 2.5, 1e-07, 1e16, -0.0, 0.1, null, true], "o": {"k": [{}]}}')
+  A.eq(json.encode_python(o, "\t"), table.concat({
+    "{",
+    '\t"z": [],',
+    '\t"y": {},',
+    '\t"s": "\\u00e9\\u007f\\u0001\\"\\\\/\\n\\ud83d\\ude00",',
+    '\t"n": [', "\t\t1,", "\t\t2.5,", "\t\t1e-07,", "\t\t1e+16,", "\t\t-0.0,", "\t\t0.1,", "\t\tnull,", "\t\ttrue", "\t],",
+    '\t"o": {', '\t\t"k": [', "\t\t\t{}", "\t\t]", "\t}",
+    "}",
+  }, "\n"))
 end
 
 return T
