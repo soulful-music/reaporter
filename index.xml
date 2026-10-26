@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<index version="1" name="ReaPorter" commit="f7d6ca5d1db30c4b51788064fc643c3a7cae51cc">
+  <category name="FX">
+    <reapack name="ReaPorter.lua" type="script" desc="ReaPorter: convert plugin-vendor presets into REAPER presets">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 ReaPorter\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Converts the preset files plugin vendors install on your computer into REAPER user presets, so the plugin's REAPER preset menu, actions, SWS, OSC and control surfaces can switch them by name.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Open it, untick what you don't want, press Convert. Nothing is written before that. Every preset file it changes is backed up first to presets/ReaPorter-backup; presets already in a file are never altered, and a name already there is skipped.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Needs ReaImGui 0.10 or newer. Verified on macOS; Windows and Linux: please report.\par}
+}
+]]></description>
+        <link rel="website" href="https://github.com/soulful-music/reaporter">Repository</link>
+        <link rel="website" href="https://github.com/soulful-music/reaporter/issues">Issues</link>
+      </metadata>
+      <version name="1.0.0" author="Toms" time="2026-10-26T15:01:44Z">
+        <changelog><![CDATA[First release. Converts the presets of Eventide, LiquidSonics, Relab (LX480 v4),
+Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that are already on
+this computer into REAPER user presets, with a backup of every preset file it changes.]]></changelog>
+        <source main="main">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/ReaPorter.lua</source>
+        <source file="reaporter/adapters/eventide.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/eventide.lua</source>
+        <source file="reaporter/adapters/init.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/init.lua</source>
+        <source file="reaporter/adapters/liquidsonics.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/liquidsonics.lua</source>
+        <source file="reaporter/adapters/relab.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/relab.lua</source>
+        <source file="reaporter/adapters/reverb_foundry.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/reverb_foundry.lua</source>
+        <source file="reaporter/adapters/soundtoys.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/soundtoys.lua</source>
+        <source file="reaporter/adapters/valhalla.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/valhalla.lua</source>
+        <source file="reaporter/codec/json.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/json.lua</source>
+        <source file="reaporter/codec/juce.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/juce.lua</source>
+        <source file="reaporter/codec/xml.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/xml.lua</source>
+        <source file="reaporter/core/convert.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/convert.lua</source>
+        <source file="reaporter/core/ini.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/ini.lua</source>
+        <source file="reaporter/core/pins.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/pins.lua</source>
+        <source file="reaporter/core/plugin_list.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/plugin_list.lua</source>
+        <source file="reaporter/core/scan.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/scan.lua</source>
+        <source file="reaporter/core/sidecar.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/sidecar.lua</source>
+        <source file="reaporter/core/text.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/text.lua</source>
+        <source file="reaporter/main.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/main.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <metadata>
+    <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 ReaPorter\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 ReaPorter is a free REAPER script that turns the preset files plugin vendors install on your computer into REAPER user presets. Each one becomes an entry in the plugin's own REAPER preset menu, so anything that switches REAPER presets by name can use it: the FX window, actions, SWS, OSC and control surfaces.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 It reads only what is already on your machine and ships no presets.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Install\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 ReaPorter needs {\field{\*\fldinst{HYPERLINK "https://forum.cockos.com/showthread.php?t=250419"}}{\fldrslt{\ul
+ReaImGui
+}}}
+ (0.10 or newer), which ReaPack installs from its default repository. Older builds show no window on recent macOS (0.9.2 on macOS 26).\par}
+{\pard \ql \f0 \sa180 \li360 \fi-360 1.\tx360\tab In REAPER: {\b Extensions > ReaPack > Import repositories...}, paste\par}
+{\pard \ql \f0 \sa180 \li360 \fi0 \f1 https://raw.githubusercontent.com/soulful-music/reaporter/main/index.xml\par}
+{\pard \ql \f0 \sa180 \li360 \fi-360 2.\tx360\tab {\b Extensions > ReaPack > Browse packages}, find {\b ReaPorter}, install it. Install {\b ReaImGui} the same way if you don't have it, then restart REAPER.\par}
+{\pard \ql \f0 \sa180 \li360 \fi-360 3.\tx360\tab Run {\b Script: ReaPorter.lua} from the Actions list.\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Use\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 ReaPorter scans for each vendor's preset folders and matches every plugin to REAPER's plugin list. For each plugin it shows how many presets it found, how many are new and how many REAPER already has under the same name. That is a dry run: nothing is written or created yet. A plugin REAPER lists under another name shows "resolved on Convert": Convert loads it once on a temporary track at the end of the project to ask REAPER for its preset file, and removes the track again.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Vendors fold open to show their plugins, and the search box filters by plugin or vendor name; Convert still acts on everything ticked, and says how many ticked plugins the search hides. Untick what you don't want and press {\b Convert}. It converts in the background, a few presets per frame, so REAPER stays responsive, then lists what it wrote, what it skipped and what failed, with the reason.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 What it guarantees:\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b A backup first.} Before it changes a preset file it copies it to {\f1 <resource>/presets/ReaPorter-backup/<file>.<date-time>.ini} ({\f1 -2}, {\f1 -3}, ... when that name is taken; a backup is never overwritten).\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b A file it cannot read is left alone.} A preset file or MixSurface file that exists but cannot be read is reported and never replaced.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b Existing presets are never altered.} New entries are appended; every byte already in the file stays as it is, except the preset count.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b No duplicates.} A name the file already has (ignoring case and spaces at either end, as REAPER lists names) is skipped and reported. Running ReaPorter again only adds presets that are new since the last run.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b All or nothing per file.} It writes a temporary file, reads it back, then replaces the old one. A failure leaves the old file intact.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b One bad preset doesn't stop the rest.} A file that fails to convert is listed with the reason; the other presets of that plugin and the other plugins carry on.\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A preset that failed to convert because of its contents is remembered (its plugin, path, size and checksum, in {\f1 <resource>/presets/ReaPorter-failed.json}); a failure that depends on REAPER or its plugin list, such as a missing VST2 id, is not, and is tried again. The next scan counts it under "Can't convert", with the reason on hover, not as new, and Convert does not try it again. A file that changes, or a new ReaPorter version, gets tried again. A plugin whose only presets left are ones that can't convert shows 0 new and is not ticked, also when REAPER lists the plugin under another name and its preset file is only resolved on Convert.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Preset names are the file names. When two files share a name, the folder is added: {\f1 Big Hall (Vocals)}.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A plugin that is already open can load the new presets without being reopened: by name, by index and with next preset. (Measured with an FX open while its preset file was rewritten three times.) Whether the FX window's preset menu lists them before the plugin is reopened has not been checked.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel2 \b \fs28 MixSurface folders and tags\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 When the {\field{\*\fldinst{HYPERLINK "https://mixsurface.app"}}{\fldrslt{\ul
+MixSurface
+}}}
+ control surface is installed ({\f1 <resource>/MixSurface/} exists), ReaPorter can also write its folders-and-tags file, so the vendor's folders and a few tags (hall, plate, vocal, ...) show in its preset browser. The option is shown only then. The format is open: {\field{\*\fldinst{HYPERLINK "SIDECAR.md"}}{\fldrslt{\ul
+SIDECAR.md
+}}}
+.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Supported plugins\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 VST3 builds. Converting needs the plugin installed in REAPER, since the preset carries REAPER's id for it.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 | Vendor | Plugins | Preset files | |---|---|---| | DMGAudio | Multiplicity, Expurgate, Essence (not Multiplicity's band presets) | {\f1 .MultiplicityPreset}, {\f1 .exp}, {\f1 .ess} | | Eventide | every plugin with a folder in {\f1 ~/Music/Eventide} (Blackhole, H3000, SP2016, UltraReverb, ...) | {\f1 .tide}, {\f1 .tidex} | | FabFilter | Micro, Pro-C 2, Pro-DS, Pro-G, Pro-L, Pro-L 2, Pro-MB, Pro-Q 2, Pro-Q 3, Pro-Q 4, Pro-R, Pro-R 2, Saturn, Saturn 2, Simplon, Timeless 2, Timeless 3, Twin 2, Twin 3, Volcano 2, Volcano 3 (presets in the plugin's current layout and the older layouts listed in FORMATS.md) | {\f1 .ffp} | | LiquidSonics | Cinematic Rooms Professional, Lustrous Plates Surround | {\f1 .crp_preset}, {\f1 .lp_preset} | | Relab | LX480 v4 (v4 presets; the legacy layout is listed as failed) | {\f1 .lx480} | | Reverb Foundry | Tai Chi | {\f1 .taichi_preset} | | Soundtoys | every Soundtoys 5 plugin with a preset folder | {\f1 .toy} | | Valhalla DSP | every plugin with a {\f1 Presets} folder (VintageVerb, Supermassive, Delay, Plate, ...) | {\f1 .vpreset} |\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Not covered: FabFilter One, and FabFilter presets in a layout the plugin migrates itself when it opens the file: an older plugin's presets in a newer one's folder (Pro-Q 3 in Pro-Q 4, Pro-R in Pro-R 2, Twin in Twin 2, Volcano in Volcano 2, ...) and older layouts of Saturn, Saturn 2, Timeless 2, Timeless 3, Twin 2, Twin 3, Volcano 2 and Volcano 3. They are listed as "can't convert" with the layout (about 30% of one FabFilter library). Also encrypted presets (LiquidSonics Illusion and Seventh Heaven, Reverb Foundry HD Cart), Eventide presets with non-numeric parameters (some Physion Mk II), AU and VST2.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 How each format converts: {\field{\*\fldinst{HYPERLINK "FORMATS.md"}}{\fldrslt{\ul
+FORMATS.md
+}}}
+.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Platforms\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b macOS}: verified.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab {\b Windows, Linux}: please report. The vendor folders there follow the usual conventions ({\f1 C:\\ProgramData}, {\f1 %APPDATA%}, {\f1 Documents}/{\f1 Music}, {\f1 C:\\Users\\Public}) but have not been checked. If ReaPorter finds nothing, or finds the wrong thing, open an issue with the folder your vendor installs presets into.\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Adding a vendor\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A vendor is one file in {\f1 FX/reaporter/adapters/} and one line in {\f1 adapters/init.lua}:\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \f1 local M = \{ vendor = "Vendor", key = "vendor" \}   -- key: the sidecar's "factory:<key>"\line
+\line
+function M.plugins(env)          -- env.dirs (common, user, music, shared), env.fs, env.vst3\line
+  return \{ \{\line
+    fx_name = "VST3: Plugin (Vendor)",   -- REAPER's FX name\line
+    bundle = "Plugin",                    -- the .vst3 bundle name\line
+    roots = \{ env.dirs.common .. "/Vendor/Plugin/Presets" \},\line
+    exts = \{ ".preset" \},\line
+  \} \}\line
+end\line
+\line
+function M.to_state(bytes, path, plugin)   -- one preset file -> the plugin's vst_chunk\line
+  ...\line
+end\line
+\line
+return M\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Optional: {\f1 plugin.pins = \{ inputs, outputs \}}, the plugin's pin counts as REAPER reports them on a stereo track (a preset carries them; without them ReaPorter asks REAPER once, on Convert), {\f1 plugin.skip(path)} to leave files out, {\f1 M.tags(bytes)} for the vendor's own category fields. Shared codecs live in {\f1 codec/} (JUCE ValueTree and VST3 containers, XML, JSON). An adapter makes no {\f1 reaper.*} calls. Add a synthetic fixture to {\f1 tests/} (never a real vendor file) and a section to FORMATS.md.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Development\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 The conversion modules are plain Lua 5.4 and run outside REAPER:\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \f1 lua5.4 tests/run.lua                                   # tests, synthetic fixtures only\line
+lua5.4 tools/reaporter-cli.lua list --resource <REAPER resource folder>\line
+lua5.4 tools/reaporter-cli.lua export --resource <dir> --out <dir>\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 {\f1 export} writes the converted preset files to {\f1 --out} and never touches the resource folder.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A release is: bump {\f1 @version} in {\f1 FX/ReaPorter.lua}, add its {\f1 @changelog}, push. The GitHub Action runs the tests and updates {\f1 index.xml}.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 License\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 MIT, see {\field{\*\fldinst{HYPERLINK "LICENSE"}}{\fldrslt{\ul
+LICENSE
+}}}
+.\par}
+}
+]]></description>
+  </metadata>
+</index>
