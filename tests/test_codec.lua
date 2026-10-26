@@ -171,6 +171,37 @@ T["zlib: stored blocks round-trip, also past one block"] = function()
   A.eq(#zlib.store(("x"):rep(70000)), 2 + 2 * 5 + 70000 + 4)
 end
 
+-- A fixed-Huffman stream: the literal "a", then `matches` x (length 258, distance 1).
+local function bomb(matches)
+  local bits, nb = {}, 0
+  local function put(v, n, msb_first)
+    for i = 0, n - 1 do
+      nb = nb + 1
+      bits[nb] = msb_first and (v >> (n - 1 - i)) & 1 or (v >> i) & 1
+    end
+  end
+  put(1, 1); put(1, 2) -- last block, fixed codes
+  put(0x30 + 97, 8, true)
+  for _ = 1, matches do put(0xC0 + 5, 8, true); put(0, 5, true) end
+  put(0, 7, true)
+  local bytes = {}
+  for i = 1, nb, 8 do
+    local b = 0
+    for k = 0, 7 do b = b | ((bits[i + k] or 0) << k) end
+    bytes[#bytes + 1] = string.char(b)
+  end
+  return "\x78\x01" .. table.concat(bytes) .. "\0\0\0\0"
+end
+
+T["zlib: inflate stops at an output limit"] = function()
+  local z = bomb(50) -- 12901 bytes from about 90
+  A.truthy(#z < 120)
+  A.raises(function() zlib.inflate(z, 1000) end, "output larger than 1000")
+  A.raises(function() zlib.inflate(zlib.store(("x"):rep(500)), 100) end, "output larger than 100")
+  A.raises(function() zlib.inflate(("\x78\x01\x01\x01\x00\xfe\xff" .. "a" .. "\0\0\0\0"), 0) end, "output larger")
+  A.raises(function() zlib.inflate(z) end, "data check") -- under the default cap it inflates, then fails the checksum
+end
+
 T["zlib: bad streams raise"] = function()
   A.raises(function() zlib.inflate("\x78\x02") end, "header")
   local z = zlib.store("hello")

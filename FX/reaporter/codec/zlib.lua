@@ -153,8 +153,12 @@ local function dynamic(r)
 end
 
 -- Decompress a zlib stream; bytes after its end are ignored, as zlib's one-shot
--- uncompress does. Raises on a bad header, corrupt data or a wrong checksum.
-function M.inflate(s)
+-- uncompress does. Raises on a bad header, corrupt data, a wrong checksum, or output past
+-- `limit` bytes (default M.MAX_OUTPUT: a few KB can inflate to gigabytes).
+M.MAX_OUTPUT = 64 * 1024 * 1024
+
+function M.inflate(s, limit)
+  limit = limit or M.MAX_OUTPUT
   if #s < 2 then fail("truncated header") end
   local cmf, flg = s:byte(1, 2)
   if cmf & 0x0F ~= 8 or (cmf * 256 + flg) % 31 ~= 0 or cmf >> 4 > 7 then fail("incorrect header check") end
@@ -170,6 +174,7 @@ function M.inflate(s)
       local len, nlen = string.unpack("<I2<I2", s, r.pos)
       if len ~= nlen ~ 0xFFFF then fail("stored block length mismatch") end
       if r.pos + 4 + len - 1 > #s then fail("unexpected end of data") end
+      if n + len > limit then fail("output larger than " .. limit .. " bytes") end
       for k = r.pos + 4, r.pos + 3 + len do
         n = n + 1
         out[n] = s:byte(k)
@@ -181,6 +186,7 @@ function M.inflate(s)
       while true do
         local sym = decode(r, lc)
         if sym < 256 then
+          if n >= limit then fail("output larger than " .. limit .. " bytes") end
           n = n + 1
           out[n] = sym
         elseif sym == 256 then
@@ -193,6 +199,7 @@ function M.inflate(s)
           if ds > 29 then fail("bad distance symbol") end
           local dist = DBASE[ds + 1] + r.bits(DEXT[ds + 1])
           if dist > n then fail("distance too far back") end
+          if n + len > limit then fail("output larger than " .. limit .. " bytes") end
           for _ = 1, len do
             n = n + 1
             out[n] = out[n - dist]
