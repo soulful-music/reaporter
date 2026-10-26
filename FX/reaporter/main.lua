@@ -9,6 +9,9 @@ local text = require("reaporter.core.text")
 local IMGUI_API = "0.9"
 local EXT = "ReaPorter"
 local FRAME_BUDGET = 0.025 -- seconds of conversion work per UI frame
+-- Set by an automated live test before loading: {plugins = {fx name...}, sidecar, report
+-- = path, close}. It ticks those plugins, converts, writes a report and closes.
+local QA = rawget(_G, "REAPORTER_QA")
 
 if not reaper.ImGui_GetBuiltinPath then
   reaper.MB("ReaPorter needs the ReaImGui extension (0.9 or newer).\n\n"
@@ -487,6 +490,34 @@ local function draw()
   end
 end
 
+local function qa_step()
+  if S.phase == "ready" and not QA.started then
+    QA.started = true
+    S.ticked = {}
+    for _, n in ipairs(QA.plugins) do S.ticked[n] = true end
+    if QA.sidecar ~= nil then S.sidecar = QA.sidecar end
+    start_convert()
+  elseif S.phase == "done" and not QA.reported then
+    QA.reported = true
+    local f = assert(io.open(QA.report, "w"))
+    for _, p in ipairs(S.rows) do
+      local c = p.counts or {}
+      f:write(("ROW\t%s\t%s\tfound %s\tnew %s\texist %s\t%s\n"):format(p.fx_name, p.ini_name,
+        tostring(c.found), tostring(c.new), tostring(c.exist), p.problem or c.error or ""))
+    end
+    for _, r in ipairs(S.results) do
+      local sc = r.sidecar
+      f:write(("RESULT\t%s\twritten %d\tskipped %d\tfailed %d\tpins %s\tbackup %s\tsidecar %s\terror %s\n"):format(
+        r.plugin.fx_name, r.written, r.skipped, #r.failed,
+        r.plugin.pins and (r.plugin.pins[1] .. "/" .. r.plugin.pins[2]) or "-", r.backup or "-",
+        sc and ("imported " .. sc.imported .. " folder " .. sc.folder) or "-", r.error or "-"))
+      for k = 1, math.min(3, #r.failed) do f:write("  FAIL\t", r.failed[k][1], "\t", r.failed[k][2], "\n") end
+    end
+    f:write("DONE\n")
+    f:close()
+  end
+end
+
 local function loop()
   ImGui.SetNextWindowSize(ctx, 700, 520, ImGui.Cond_FirstUseEver)
   local visible, open = ImGui.Begin(ctx, "ReaPorter", true)
@@ -497,6 +528,10 @@ local function loop()
       reaper.ShowConsoleMsg("ReaPorter: " .. tostring(err) .. "\n")
       return
     end
+  end
+  if QA then
+    qa_step()
+    if QA.reported and QA.close then open = false end
   end
   if open then reaper.defer(loop) end
 end
