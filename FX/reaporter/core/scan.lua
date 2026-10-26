@@ -36,27 +36,28 @@ function M.files(plugin, fs)
   return out, unreadable
 end
 
--- Entry names for preset paths: the file stem; a stem seen twice (ignoring case) gets
--- " (<folder>)", and a name still taken gets " 2", " 3", ... Returns {{name, path}, ...}.
+-- Entry names for preset paths: the file stem; a stem seen twice (trimmed, ignoring case, as
+-- REAPER compares names) gets " (<folder>)", and a name still taken gets " 2", " 3", ...
+-- Returns {{name, path}, ...}.
 function M.named(paths)
+  local function key(s) return text.lower(text.strip_ascii(s)) end
   local stems = {}
   for _, p in ipairs(paths) do
-    local stem = text.splitext(text.basename(p))
-    local k = text.lower(stem)
+    local k = key(text.splitext(text.basename(p)))
     stems[k] = (stems[k] or 0) + 1
   end
   local seen, out = {}, {}
   for _, p in ipairs(paths) do
     local stem = text.splitext(text.basename(p))
     local name = stem
-    if stems[text.lower(stem)] > 1 then
-      name = ("%s (%s)"):format(stem, text.basename(text.dirname(p)))
+    if stems[key(stem)] > 1 then
+      name = ("%s (%s)"):format(text.strip_ascii(stem), text.basename(text.dirname(p)))
     end
     local n, k = name, 2
-    while seen[text.lower(n)] do
+    while seen[key(n)] do
       n, k = ("%s %d"):format(name, k), k + 1
     end
-    seen[text.lower(n)] = true
+    seen[key(n)] = true
     out[#out + 1] = { n, p }
   end
   return out

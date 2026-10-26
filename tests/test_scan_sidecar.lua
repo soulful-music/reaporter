@@ -37,6 +37,14 @@ T["naming: a repeated stem gets its folder, then a number"] = function()
   })
 end
 
+T["naming: stems that differ only by edge spaces are a repeat"] = function()
+  A.eq(scan.named({ "/r/Dual/Robin/DLY Blunt.tide", "/r/Single/Robin/DLY Blunt .tide", "/r/AC GTR .tide" }), {
+    { "DLY Blunt (Robin)", "/r/Dual/Robin/DLY Blunt.tide" },
+    { "DLY Blunt (Robin) 2", "/r/Single/Robin/DLY Blunt .tide" },
+    { "AC GTR ", "/r/AC GTR .tide" },
+  })
+end
+
 T["sidecar: folder relative to the factory root"] = function()
   A.eq(sidecar.folder_of(CRP .. "Factory Presets/Scoring/Small Rooms/Cubby.crp_preset", ROOTS), { "Scoring", "Small Rooms" })
   A.eq(sidecar.folder_of(CRP .. "Factory Presets/Glass Hall.crp_preset", ROOTS), {})

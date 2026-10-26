@@ -46,7 +46,7 @@ What it guarantees:
   cannot be read is reported and never replaced.
 - **Existing presets are never altered.** New entries are appended; every byte already in the
   file stays as it is, except the preset count.
-- **No duplicates.** A name the file already has (ignoring case) is skipped and reported.
+- **No duplicates.** A name the file already has (ignoring case and spaces at either end, as REAPER lists names) is skipped and reported.
   Running ReaPorter again only adds presets that are new since the last run.
 - **All or nothing per file.** It writes a temporary file, reads it back, then replaces the
   old one. A failure leaves the old file intact.
