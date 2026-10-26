@@ -58,6 +58,7 @@ file it changes.]]></changelog>
 {\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 ReaPorter\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 ReaPorter is a free REAPER script that turns the preset files plugin vendors install on your computer into REAPER user presets. Each one becomes an entry in the plugin's own REAPER preset menu, so anything that switches REAPER presets by name can use it: the FX window, actions, SWS, OSC and control surfaces.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 It reads only what is already on your machine and ships no presets.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 {\cf1 [image: docs/reaporter-convert.gif]\cf0}\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Install\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 ReaPorter needs {\field{\*\fldinst{HYPERLINK "https://forum.cockos.com/showthread.php?t=250419"}}{\fldrslt{\ul
 ReaImGui
