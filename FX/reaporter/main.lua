@@ -10,7 +10,8 @@ local IMGUI_API = "0.9"
 local EXT = "ReaPorter"
 local FRAME_BUDGET = 0.025 -- seconds of conversion work per UI frame
 -- Set by an automated live test before loading: {plugins = {fx name...}, sidecar, report
--- = path, close}. It ticks those plugins, converts, writes a report and closes.
+-- = path, close, search, hold}. It ticks those plugins, converts, writes a report and
+-- closes; with `hold` it only types `search` and leaves the list open.
 local QA = rawget(_G, "REAPORTER_QA")
 
 if not reaper.ImGui_GetBuiltinPath then
@@ -160,6 +161,9 @@ local S = {
   sidecar = reaper.GetExtState(EXT, "sidecar") ~= "0",
   mixsurface = false,
   results = {},
+  search = "",
+  open = {}, -- vendor -> expanded
+  open_saved = false,
 }
 
 local function load_set(key)
@@ -197,6 +201,7 @@ local function start_scan()
     end
   end
   S.ticked, S.known = load_set("ticked"), load_set("known")
+  S.open, S.open_saved = load_set("open"), reaper.HasExtState(EXT, "open")
   S.mixsurface = fs.is_dir(RESOURCE .. "/MixSurface")
   S.scan_next = 1
   S.phase = "scan"
@@ -239,6 +244,7 @@ local function start_convert()
   for _, p in ipairs(list) do S.total = S.total + p.counts.new end
   save_set("ticked", S.ticked)
   save_set("known", S.known)
+  save_open()
   reaper.SetExtState(EXT, "sidecar", S.sidecar and "1" or "0", true)
   S.phase = "converting"
 end
@@ -326,10 +332,74 @@ local function plugin_label(p)
   return (p.fx_name:gsub("^VST3i?: ", ""):gsub(" %([^()]*%)$", ""))
 end
 
+-- Does a plugin pass the search? Case-insensitive, on the plugin's name or its vendor's.
+local function matches(g, p)
+  if S.search == "" then return true end
+  local q = text.lower(S.search)
+  return text.lower(plugin_label(p)):find(q, 1, true) ~= nil
+    or text.lower(g.adapter.vendor):find(q, 1, true) ~= nil
+end
+
+local function save_open()
+  local set = {}
+  for v, o in pairs(S.open) do
+    if o then set[v] = true end
+  end
+  save_set("open", set)
+  S.open_saved = true
+end
+
+local function set_all_open(o)
+  for _, g in ipairs(S.groups) do S.open[g.adapter.vendor] = o end
+  save_open()
+end
+
+local function draw_search()
+  ImGui.SetNextItemWidth(ctx, -190)
+  local changed, v = ImGui.InputTextWithHint(ctx, "##search", "Search plugins or vendors", S.search)
+  if changed then S.search = v end
+  ImGui.SameLine(ctx)
+  if ImGui.Button(ctx, "Expand all") then set_all_open(true) end
+  ImGui.SameLine(ctx)
+  if ImGui.Button(ctx, "Collapse all") then set_all_open(false) end
+end
+
+local function count_cells(found, new, exist)
+  ImGui.TableNextColumn(ctx)
+  ImGui.Text(ctx, tostring(found))
+  ImGui.TableNextColumn(ctx)
+  if new > 0 then ImGui.Text(ctx, tostring(new)) else ImGui.TextDisabled(ctx, "0") end
+  ImGui.TableNextColumn(ctx)
+  if exist > 0 then ImGui.TextDisabled(ctx, tostring(exist)) end
+end
+
+local function draw_plugin(p)
+  ImGui.TableNextRow(ctx)
+  ImGui.TableNextColumn(ctx)
+  local ok = available(p)
+  ImGui.BeginDisabled(ctx, not ok or S.phase ~= "ready")
+  local ch, tv = ImGui.Checkbox(ctx, plugin_label(p) .. "##" .. p.fx_name, ok and S.ticked[p.fx_name] or false)
+  ImGui.EndDisabled(ctx)
+  if ch then S.ticked[p.fx_name] = tv or nil end
+  if p.problem then
+    ImGui.TableNextColumn(ctx)
+    ImGui.TextDisabled(ctx, p.problem)
+  elseif not p.counts then
+    ImGui.TableNextColumn(ctx)
+    ImGui.TextDisabled(ctx, "scanning...")
+  elseif p.counts.error then
+    ImGui.TableNextColumn(ctx)
+    ImGui.TextColored(ctx, RED, "can't merge")
+    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, p.counts.error) end
+  else
+    count_cells(p.counts.found, p.counts.new, p.counts.exist)
+  end
+end
+
 local function draw_list()
   local flags = ImGui.TableFlags_RowBg | ImGui.TableFlags_ScrollY | ImGui.TableFlags_SizingStretchProp
   local _, avail_h = ImGui.GetContentRegionAvail(ctx)
-  local footer = ImGui.GetFrameHeightWithSpacing(ctx) * (S.mixsurface and 3 or 2) + 8
+  local footer = ImGui.GetFrameHeightWithSpacing(ctx) * (S.mixsurface and 3 or 2) + 4
   if not ImGui.BeginTable(ctx, "plugins", 4, flags, 0, math.max(120, avail_h - footer)) then return end
   ImGui.TableSetupScrollFreeze(ctx, 0, 1)
   ImGui.TableSetupColumn(ctx, "Plugin", ImGui.TableColumnFlags_WidthStretch, 3)
@@ -337,62 +407,68 @@ local function draw_list()
   ImGui.TableSetupColumn(ctx, "New", ImGui.TableColumnFlags_WidthStretch, 1)
   ImGui.TableSetupColumn(ctx, "Already in REAPER", ImGui.TableColumnFlags_WidthStretch, 1.4)
   ImGui.TableHeadersRow(ctx)
+  local searching = S.search ~= ""
   for _, g in ipairs(S.groups) do
-    local avail, all = 0, true
+    local vendor = g.adapter.vendor
+    local shown = {}
+    local avail, ticked, found, new, exist = 0, 0, 0, 0, 0
     for _, p in ipairs(g.plugins) do
+      if matches(g, p) then shown[#shown + 1] = p end
       if available(p) then
         avail = avail + 1
-        if not S.ticked[p.fx_name] then all = false end
+        if S.ticked[p.fx_name] then
+          ticked = ticked + 1
+          found, new, exist = found + p.counts.found, new + p.counts.new, exist + p.counts.exist
+        end
       end
     end
-    ImGui.TableNextRow(ctx)
-    ImGui.TableNextColumn(ctx)
-    ImGui.BeginDisabled(ctx, avail == 0 or S.phase ~= "ready")
-    local changed, v = ImGui.Checkbox(ctx, g.adapter.vendor .. "##vendor", avail > 0 and all)
-    ImGui.EndDisabled(ctx)
-    if changed then
-      for _, p in ipairs(g.plugins) do
-        if available(p) then S.ticked[p.fx_name] = v or nil end
-      end
-    end
-    if g.error then
-      ImGui.TableNextColumn(ctx)
-      ImGui.TextColored(ctx, RED, "adapter error: " .. g.error)
-    elseif #g.plugins == 0 then
-      ImGui.TableNextColumn(ctx)
-      ImGui.TextDisabled(ctx, "no presets found")
-    end
-    for _, p in ipairs(g.plugins) do
+    if not searching or #shown > 0 then
       ImGui.TableNextRow(ctx)
       ImGui.TableNextColumn(ctx)
-      ImGui.Indent(ctx, 18)
-      local ok = available(p)
-      ImGui.BeginDisabled(ctx, not ok or S.phase ~= "ready")
-      local ch, tv = ImGui.Checkbox(ctx, plugin_label(p) .. "##" .. p.fx_name, ok and S.ticked[p.fx_name] or false)
+      ImGui.BeginDisabled(ctx, avail == 0 or S.phase ~= "ready")
+      local changed, v = ImGui.Checkbox(ctx, "##vendor" .. vendor, avail > 0 and ticked == avail)
       ImGui.EndDisabled(ctx)
-      if ch then S.ticked[p.fx_name] = tv or nil end
-      ImGui.Unindent(ctx, 18)
-      if p.problem then
+      if changed then
+        for _, p in ipairs(g.plugins) do
+          if available(p) then S.ticked[p.fx_name] = v or nil end
+        end
+      end
+      ImGui.SameLine(ctx)
+      if S.open[vendor] == nil then S.open[vendor] = not S.open_saved and #S.groups <= 3 end
+      ImGui.SetNextItemOpen(ctx, searching or S.open[vendor])
+      local label = ("%s  (%d of %d ticked)"):format(vendor, ticked, avail)
+      local open = ImGui.TreeNodeEx(ctx, "vendor" .. vendor, label, ImGui.TreeNodeFlags_SpanAvailWidth)
+      if not searching and open ~= S.open[vendor] then
+        S.open[vendor] = open
+        save_open()
+      end
+      if g.error then
         ImGui.TableNextColumn(ctx)
-        ImGui.TextDisabled(ctx, p.problem)
-      elseif not p.counts then
+        ImGui.TextColored(ctx, RED, "adapter error: " .. g.error)
+      elseif #g.plugins == 0 then
         ImGui.TableNextColumn(ctx)
-        ImGui.TextDisabled(ctx, "scanning...")
-      elseif p.counts.error then
-        ImGui.TableNextColumn(ctx)
-        ImGui.TextColored(ctx, RED, "can't merge")
-        if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, p.counts.error) end
-      else
-        ImGui.TableNextColumn(ctx)
-        ImGui.Text(ctx, tostring(p.counts.found))
-        ImGui.TableNextColumn(ctx)
-        if p.counts.new > 0 then ImGui.Text(ctx, tostring(p.counts.new)) else ImGui.TextDisabled(ctx, "0") end
-        ImGui.TableNextColumn(ctx)
-        if p.counts.exist > 0 then ImGui.TextDisabled(ctx, tostring(p.counts.exist)) end
+        ImGui.TextDisabled(ctx, "no presets found")
+      elseif ticked > 0 then
+        count_cells(found, new, exist)
+      end
+      if open then
+        for _, p in ipairs(shown) do draw_plugin(p) end
+        ImGui.TreePop(ctx)
       end
     end
   end
   ImGui.EndTable(ctx)
+end
+
+-- (ticked plugins the search hides) for the line under the list.
+local function hidden_ticked()
+  local n = 0
+  for _, g in ipairs(S.groups) do
+    for _, p in ipairs(g.plugins) do
+      if available(p) and S.ticked[p.fx_name] and not matches(g, p) then n = n + 1 end
+    end
+  end
+  return n
 end
 
 local function draw_results()
@@ -465,6 +541,7 @@ local function draw()
     return
   end
 
+  draw_search()
   draw_list()
 
   if S.mixsurface then
@@ -481,14 +558,20 @@ local function draw()
   else
     local list, total = to_convert()
     local can = S.phase == "ready" and #list > 0 and (total > 0 or (S.sidecar and S.mixsurface))
+    local hidden = hidden_ticked()
+    local label = ("Convert %d presets from %d ticked plugins"):format(total, #list)
+    if hidden > 0 then label = label .. (" (%d hidden by search)"):format(hidden) end
     ImGui.BeginDisabled(ctx, not can)
-    local label = total > 0 and ("Convert %d presets"):format(total) or "Convert"
-    if ImGui.Button(ctx, label, -1) then start_convert() end
+    if ImGui.Button(ctx, label .. "##convert", -1) then start_convert() end
     ImGui.EndDisabled(ctx)
   end
 end
 
 local function qa_step()
+  if QA.hold then
+    S.search = QA.search or ""
+    return
+  end
   if S.phase == "ready" and not QA.started then
     QA.started = true
     S.ticked = {}
