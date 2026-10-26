@@ -1,0 +1,42 @@
+-- @description ReaPorter: convert plugin-vendor presets into REAPER presets
+-- @author Toms
+-- @version 1.0.0
+-- @changelog
+--   First release. Converts the presets of Eventide, LiquidSonics, Relab (LX480 v4),
+--   Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that are already on
+--   this computer into REAPER user presets, with a backup of every preset file it changes.
+-- @about
+--   # ReaPorter
+--
+--   Converts the preset files plugin vendors install on your computer into REAPER user
+--   presets, so the plugin's REAPER preset menu, actions, SWS, OSC and control surfaces
+--   can switch them by name.
+--
+--   Open it, untick what you don't want, press Convert. Nothing is written before that.
+--   Every preset file it changes is backed up first to presets/ReaPorter-backup; presets
+--   already in a file are never altered, and a name already there is skipped.
+--
+--   Needs ReaImGui. Verified on macOS; Windows and Linux: please report.
+-- @provides
+--   [nomain] reaporter/adapters/eventide.lua
+--   [nomain] reaporter/adapters/init.lua
+--   [nomain] reaporter/adapters/liquidsonics.lua
+--   [nomain] reaporter/adapters/relab.lua
+--   [nomain] reaporter/adapters/reverb_foundry.lua
+--   [nomain] reaporter/adapters/soundtoys.lua
+--   [nomain] reaporter/adapters/valhalla.lua
+--   [nomain] reaporter/codec/json.lua
+--   [nomain] reaporter/codec/juce.lua
+--   [nomain] reaporter/codec/xml.lua
+--   [nomain] reaporter/core/convert.lua
+--   [nomain] reaporter/core/ini.lua
+--   [nomain] reaporter/core/pins.lua
+--   [nomain] reaporter/core/plugin_list.lua
+--   [nomain] reaporter/core/scan.lua
+--   [nomain] reaporter/core/sidecar.lua
+--   [nomain] reaporter/core/text.lua
+--   [nomain] reaporter/main.lua
+
+local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+package.path = dir .. "?.lua;" .. dir .. "?/init.lua;" .. package.path
+require("reaporter.main")
