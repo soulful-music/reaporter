@@ -181,6 +181,15 @@ local function save_set(key, set)
   reaper.SetExtState(EXT, key, table.concat(names, "\n"), true)
 end
 
+local function save_open()
+  local set = {}
+  for v, o in pairs(S.open) do
+    if o then set[v] = true end
+  end
+  save_set("open", set)
+  S.open_saved = true
+end
+
 local function available(p)
   return not p.problem and p.counts and not p.counts.error and p.counts.found > 0
 end
@@ -338,15 +347,6 @@ local function matches(g, p)
   local q = text.lower(S.search)
   return text.lower(plugin_label(p)):find(q, 1, true) ~= nil
     or text.lower(g.adapter.vendor):find(q, 1, true) ~= nil
-end
-
-local function save_open()
-  local set = {}
-  for v, o in pairs(S.open) do
-    if o then set[v] = true end
-  end
-  save_set("open", set)
-  S.open_saved = true
 end
 
 local function set_all_open(o)
