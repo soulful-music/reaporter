@@ -10,7 +10,8 @@ All integers are little-endian unless marked "BE". Offsets are in bytes.
 - [REAPER user-preset file](#reaper-user-preset-file)
 - [REAPER `vst_chunk` for a VST3](#reaper-vst_chunk-for-a-vst3)
 - [JUCE ValueTree (binary)](#juce-valuetree-binary)
-- [LiquidSonics](#liquidsonics) · [Reverb Foundry](#reverb-foundry) · [Eventide](#eventide) ·
+- [zlib](#zlib)
+- [DMGAudio](#dmgaudio) · [LiquidSonics](#liquidsonics) · [Reverb Foundry](#reverb-foundry) · [Eventide](#eventide) ·
   [Relab](#relab) · [Soundtoys](#soundtoys) · [Valhalla DSP](#valhalla-dsp)
 - [Not covered](#not-covered)
 
@@ -127,6 +128,46 @@ A compressed int is one byte `n` (bit 7 set = negative), then `n` little-endian 
 is a compressed-int byte count, a type byte, then the payload: `1` int32, `2` true, `3` false,
 `4` double, `5` UTF-8 string with a NUL, `6` int64, `7` array (compressed-int count, then
 vars), `8` binary.
+
+## zlib
+
+RFC 1950 streams. ReaPorter inflates every block type and writes stored (uncompressed)
+blocks only: `78 01`, then per block of at most 65535 bytes `u8 final`, `u16 len`,
+`u16 ~len`, the bytes; then the Adler-32 of the data, BE. Every inflater reads them, and
+unlike a compressor's output they are the same bytes on every system.
+
+## DMGAudio
+
+Multiplicity (`.MultiplicityPreset`), Expurgate (`.exp`), Essence (`.ess`) in
+`/Library/Application Support/DMGAudio/<plugin>/Presets/`. A preset file is `"ZIP "` and a
+zlib stream of UTF-8 JSON ending in one NUL; some Essence files are the JSON alone.
+
+The plugin state is a plain component in that same container, `"ZIP "` + zlib(JSON + NUL):
+
+```json
+{"presets": [{"parameters": {"kName": 0.25, ...} | "default", "name": "..."}],
+ "ab": [8 x {"parameters": ...}], "settings": {...}, "uiprefs": {...}, "v101": true}
+```
+
+Parameter values are normalised and only those that differ from the default are listed.
+Expurgate and Essence files have that layout already. A Multiplicity file has the one
+preset's `parameters` and `name` at the top level, with `settings`, `uiprefs` and sometimes
+`v101`.
+
+**The preset is laid over a fresh instance's state.** ReaPorter starts from the state a new
+instance of the plugin saves (shipped in the adapter: plugin defaults, not presets), and
+every top-level key of the file replaces the fresh state's, a new key going last. A
+Multiplicity file's `parameters` and `name` become `presets[0]`, and its `parameters` also
+go into the `ab` slot its `settings.currentAB` names (default 0), the other seven slots
+`"default"`. For a Multiplicity file, `v101` is dropped from the fresh state: it marks the
+current parameter layout, and the plugin migrates an older file only when the state lacks
+it. The document is written as Python's `json.dumps(state, indent="\t")` writes it (keys in
+order, non-ASCII as `\uXXXX`), then a NUL, then zlib in stored blocks.
+
+The plugin applies a loaded state only while REAPER's audio is running, and REAPER's own
+parameter readout keeps its old values after any DMGAudio state load, REAPER's own included.
+All three have 4 inputs (main plus sidechain), 2 outputs. `Multiplicity/BandPresets` (`.mpb`)
+hold one band, not a plugin state, and are not converted.
 
 ## LiquidSonics
 

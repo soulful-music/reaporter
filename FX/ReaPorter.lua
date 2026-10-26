@@ -18,6 +18,8 @@
 --
 --   Needs ReaImGui. Verified on macOS; Windows and Linux: please report.
 -- @provides
+--   [nomain] reaporter/adapters/dmgaudio.lua
+--   [nomain] reaporter/adapters/dmgaudio_fresh.lua
 --   [nomain] reaporter/adapters/eventide.lua
 --   [nomain] reaporter/adapters/init.lua
 --   [nomain] reaporter/adapters/liquidsonics.lua
@@ -28,6 +30,7 @@
 --   [nomain] reaporter/codec/json.lua
 --   [nomain] reaporter/codec/juce.lua
 --   [nomain] reaporter/codec/xml.lua
+--   [nomain] reaporter/codec/zlib.lua
 --   [nomain] reaporter/core/convert.lua
 --   [nomain] reaporter/core/ini.lua
 --   [nomain] reaporter/core/plan.lua

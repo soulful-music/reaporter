@@ -114,4 +114,15 @@ function M.memfs(root, tree)
   return fs
 end
 
+-- A DMGAudio-style preset or state: JSON text, zipped ("ZIP " + zlib) unless plain.
+function M.dmg(text, plain)
+  if plain then return text end
+  return "ZIP " .. require("reaporter.codec.zlib").store(text .. "\0")
+end
+
+-- A synthetic fresh state in the DMGAudio layout.
+M.DMG_FRESH = '{"presets": [{"parameters": "default", "name": "None"}], '
+  .. '"ab": [{"parameters": "default"}, {"parameters": "default"}], '
+  .. '"settings": {"currentAB": 0, "zoomLevel": 3}, "uiprefs": {"w": 100}, "v101": true}'
+
 return M

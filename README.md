@@ -75,6 +75,7 @@ REAPER's id for it.
 
 | Vendor | Plugins | Preset files |
 |---|---|---|
+| DMGAudio | Multiplicity, Expurgate, Essence (not Multiplicity's band presets) | `.MultiplicityPreset`, `.exp`, `.ess` |
 | Eventide | every plugin with a folder in `~/Music/Eventide` (Blackhole, H3000, SP2016, UltraReverb, ...) | `.tide`, `.tidex` |
 | LiquidSonics | Cinematic Rooms Professional, Lustrous Plates Surround | `.crp_preset`, `.lp_preset` |
 | Relab | LX480 v4 (v4 presets; the legacy layout is listed as failed) | `.lx480` |

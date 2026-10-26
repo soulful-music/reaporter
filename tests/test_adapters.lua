@@ -3,7 +3,10 @@ local F = require("fixtures")
 local juce = require("reaporter.codec.juce")
 local registry = require("reaporter.adapters")
 
+local dmgaudio = require("reaporter.adapters.dmgaudio")
 local eventide = require("reaporter.adapters.eventide")
+local json = require("reaporter.codec.json")
+local zlib = require("reaporter.codec.zlib")
 local liquidsonics = require("reaporter.adapters.liquidsonics")
 local relab = require("reaporter.adapters.relab")
 local reverb_foundry = require("reaporter.adapters.reverb_foundry")
@@ -33,7 +36,7 @@ T["registry: every adapter honours the contract"] = function()
     fs = F.memfs("/", {}),
     vst3 = {},
   }
-  A.eq(#registry, 6)
+  A.eq(#registry, 7)
   local keys = {}
   for _, a in ipairs(registry) do
     A.truthy(type(a.vendor) == "string" and type(a.key) == "string", "vendor and key")
@@ -201,6 +204,73 @@ T["soundtoys: the text wrapped VST2-style, id from REAPER's list"] = function()
   local fx_id, ver, progs, inner = unwrap(chunk)
   A.eq({ fx_id, ver, progs, inner }, { "StDL", 1, 1, file })
   A.raises(function() soundtoys.to_state("WIDGET = X;\r", "x.toy", ps[1]) end, "archive")
+end
+
+-- The state document inside a DMGAudio vst_chunk, and its JSON text.
+local function dmg_state(chunk)
+  local n = string.unpack("<I4", chunk)
+  A.eq(string.unpack("<I4", chunk, 5), 1)
+  A.eq(chunk:sub(9 + n), ("\0"):rep(8))
+  local comp = chunk:sub(9, 8 + n)
+  A.eq(comp:sub(1, 4), "ZIP ")
+  local text = zlib.inflate(comp:sub(5))
+  A.eq(text:sub(-1), "\0")
+  return json.decode(text:sub(1, -2)), text:sub(1, -2)
+end
+
+local function dmg_plugin(name)
+  for _, p in ipairs(dmgaudio.plugins({ dirs = { common = "/c" } })) do
+    if p.bundle == name then return p end
+  end
+end
+
+T["dmgaudio: every plugin ships its fresh state and pins"] = function()
+  local ps = dmgaudio.plugins({ dirs = { common = "/c" } })
+  A.eq(#ps, 3)
+  for _, p in ipairs(ps) do
+    A.truthy(json.is_object(dmgaudio.read_json(p.fresh)), p.bundle)
+    A.eq(p.pins, { 4, 2 })
+    A.eq(p.roots, { "/c/DMGAudio/" .. p.bundle .. "/Presets" })
+  end
+end
+
+T["dmgaudio: a full-state preset's keys replace the fresh state's, the rest stays"] = function()
+  local plugin = { fresh = F.DMG_FRESH }
+  local file = F.dmg('{"presets": [{"parameters": {"kOne": 0.25}, "name": "P"}], "settings": {"currentAB": 1}, "extra": 2}')
+  local doc, text = dmg_state(dmgaudio.to_state(file, "x.exp", plugin))
+  A.eq(json.keys(doc), { "presets", "ab", "settings", "uiprefs", "v101", "extra" })
+  A.eq(doc.presets[1].parameters.kOne, 0.25)
+  A.eq(doc.settings.currentAB, 1)
+  A.eq(doc.settings.zoomLevel, nil)
+  A.eq(doc.v101, true)
+  A.eq(text:sub(1, 16), '{\n\t"presets": [\n')
+end
+
+T["dmgaudio: a top-level preset goes into presets and the current A/B slot, v101 dropped"] = function()
+  local plugin = { fresh = F.DMG_FRESH }
+  local file = F.dmg('{"parameters": {"kB1": 0.5, "kB2": 1}, "name": "Synthetic Top", "settings": {"currentAB": 2}}', true)
+  local doc = dmg_state(dmgaudio.to_state(file, "x.multiplicitypreset", plugin))
+  A.eq(json.keys(doc), { "presets", "ab", "settings", "uiprefs" })
+  A.eq(json.keys(doc.presets[1]), { "parameters", "name" })
+  A.eq(doc.presets[1].name, "Synthetic Top")
+  A.eq(#doc.ab, 8)
+  for i, slot in ipairs(doc.ab) do
+    if i == 3 then A.eq(json.keys(slot.parameters), { "kB1", "kB2" }) else A.eq(slot.parameters, "default") end
+  end
+  A.eq(doc.v101, nil)
+  local kept = dmg_state(dmgaudio.to_state(F.dmg('{"parameters": {}, "v101": true}'), "x", plugin))
+  A.eq(json.keys(kept), { "presets", "ab", "settings", "uiprefs", "v101" })
+  A.eq(kept.presets[1].name, "")
+  A.eq(kept.ab[1].parameters, json.decode("{}"))
+end
+
+T["dmgaudio: files that are not a preset fail"] = function()
+  local plugin = { fresh = F.DMG_FRESH }
+  A.raises(function() dmgaudio.to_state(F.dmg('{"presets": []}'), "x", plugin) end, "empty presets")
+  A.raises(function() dmgaudio.to_state(F.dmg('{"name": "x"}'), "x", plugin) end, "no presets list")
+  A.raises(function() dmgaudio.to_state(F.dmg("[1]"), "x", plugin) end, "not a JSON object")
+  A.raises(function() dmgaudio.to_state("ZIP garbage", "x", plugin) end, "zlib")
+  A.raises(function() dmgaudio.to_state(F.dmg("{}"), "x", {}) end, "fresh")
 end
 
 return T
