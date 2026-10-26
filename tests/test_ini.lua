@@ -26,7 +26,7 @@ end
 T["file names follow REAPER's rule"] = function()
   A.eq(ini.preset_file_name("VST3: Tai Chi (Reverb Foundry)"), "vst3-Tai Chi.ini")
   A.eq(ini.preset_file_name("VST3i: Kit (Vendor)"), "vst3-Kit.ini")
-  A.eq(ini.preset_file_name("VST3: Blackhole Immersive (Eventide) (16ch)"), "vst3-Blackhole Immersive (Eventide).ini")
+  A.eq(ini.preset_file_name("VST3: Blackhole Immersive (Eventide) (16ch)"), "vst3-Blackhole Immersive.ini")
 end
 
 T["listed names: as REAPER's index reads them"] = function()

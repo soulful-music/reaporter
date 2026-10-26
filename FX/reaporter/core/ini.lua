@@ -195,9 +195,11 @@ function M.read_ini(bytes)
 end
 
 -- The file REAPER uses for a VST3's user presets: "VST3: Tai Chi (Reverb Foundry)" ->
--- "vst3-Tai Chi.ini".
+-- "vst3-Tai Chi.ini". REAPER's channel-count suffix goes first: "VST3: Blackhole
+-- Immersive (Eventide) (16ch)" -> "vst3-Blackhole Immersive.ini" (measured).
 function M.preset_file_name(fx_name)
   local name = fx_name:gsub("^VST3i?: ", "")
+  name = name:gsub(" %(%d+ch%)$", "")
   name = name:gsub(" %([^()]*%)$", "")
   return "vst3-" .. name .. ".ini"
 end
