@@ -7,9 +7,9 @@ local M = { vendor = "FabFilter", key = "fabfilter" }
 
 -- folder, container, magic, accepted "version/count" layouts, instance name (FFBS), pins
 -- (in, out on a stereo track, REAPER 7.82 macOS), instrument. Accepted, each measured: the
--- plugin's own layout (its Default Setting file, a fresh instance's count), older counts a
--- fresh instance loads as the same floats plus defaults, and Timeless 2 version 4, which
--- FabFilter's own version 5 re-saves keep float for float.
+-- plugin's own layout (its Default Setting file, a fresh instance's count) and older counts
+-- a fresh instance loads as the same floats plus defaults. Timeless 2 version 4 is not
+-- accepted: only 14 of 19 of FabFilter's own version 5 re-saves keep its floats.
 local PLUGINS = {
   { "Micro", "FabF", "FMic", { "1/8" }, nil, { 2, 2 } },
   { "Pro-C 2", "FabF", "FC2p", { "2/46" }, nil, { 4, 2 } },
@@ -26,12 +26,17 @@ local PLUGINS = {
   { "Saturn", "FabF", "FSat", { "4/893", "4/899" }, nil, { 4, 2 } },
   { "Saturn 2", "FFBS", "FS2a", { "4/951" }, "", { 4, 2 } },
   { "Simplon", "FabF", "FSim", { "1/17", "1/18" }, nil, { 2, 2 } },
-  { "Timeless 2", "FabF", "FTms", { "4/705", "5/705" }, nil, { 4, 2 } },
+  { "Timeless 2", "FabF", "FTms", { "5/705" }, nil, { 4, 2 } },
   { "Timeless 3", "FFBS", "F3Ts", { "10/1007" }, "", { 4, 2 } },
   { "Twin 2", "FabF", "FT2i", { "8/883" }, nil, { 2, 2 }, true },
   { "Twin 3", "FFBS", "FT3i", { "18/1288" }, "", { 2, 2 }, true },
   { "Volcano 2", "FabF", "FV2l", { "2/709" }, nil, { 4, 2 } },
   { "Volcano 3", "FFBS", "FV3l", { "5/896" }, "", { 4, 2 } },
+}
+
+-- Layouts known to load differently in the plugin than the file's floats, with the reason.
+local NOT_CONVERTED = {
+  ["Timeless 2 4/705"] = "FabFilter's own re-saves to version 5 change some floats, so the converted preset could sound different",
 }
 
 local EMPTY_CUSV = "CuSV" .. string.pack("<I4<I4", 1, 0)
@@ -126,15 +131,21 @@ function M.parse(data)
   return magic, ver, count, data:sub(13, stop), tail ~= "" and M.cusv_block(tail) or nil
 end
 
+-- A file's 4-byte magic as text: itself when printable ASCII, else 0x and its hex.
+local function show_magic(m)
+  if m:match("^[%w _%-]+$") then return m end
+  return "0x" .. m:gsub(".", function(c) return ("%02x"):format(c:byte()) end)
+end
+
 -- The vst_chunk for a preset file's bytes, named `name`; raises with the reason when the
 -- layout does not convert.
 function M.state(data, name, plugin)
   local magic, ver, count, floats, cusv = M.parse(data)
   if magic ~= plugin.magic then
-    error(("another plugin's preset layout (%s), not %s's"):format(magic, plugin.folder), 0)
+    error(("another plugin's preset layout (%s), not %s's"):format(show_magic(magic), plugin.folder), 0)
   end
   if not plugin.accepted[ver .. "/" .. count] then
-    error(("%s preset layout version %d with %d values: the plugin migrates it itself"):format(plugin.folder, ver, count), 0)
+    error(("%s preset layout version %d with %d values: %s"):format(plugin.folder, ver, count, (NOT_CONVERTED[plugin.folder .. " " .. ver .. "/" .. count] or "the plugin migrates it itself")), 0)
   end
   local comp, ctrl
   if plugin.container == "FabF" then

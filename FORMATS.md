@@ -244,16 +244,17 @@ a layout measured to load as is:
 | Saturn | 4 / 893, 4 / 899 |
 | Saturn 2 | 4 / 951 |
 | Simplon | 1 / 17, 1 / 18 |
-| Timeless 2 | 4 / 705, 5 / 705 |
+| Timeless 2 | 5 / 705 |
 | Timeless 3 | 10 / 1007 |
 | Twin 2 | 8 / 883 |
 | Twin 3 | 18 / 1288 |
 | Volcano 2 | 2 / 709 |
 | Volcano 3 | 5 / 896 |
 
-Timeless 2 version 4 files and FabFilter's own version 5 saves of the same presets hold the
-same floats. Other versions are migrated by the plugin when it opens the file. The state has
-no version, so they are not converted. Twin 3 version 17 has 1292 values against 1288 now, so
+Timeless 2 version 4 files are not converted: only 14 of 19 of FabFilter's own version 5
+re-saves of the same presets hold the same floats, so a converted one could load differently.
+Other versions are migrated by the plugin when it opens the file. The state has no version,
+so they are not converted. Twin 3 version 17 has 1292 values against 1288 now, so
 its layout changed, not only grew.
 
 Files of another plugin's layout in a newer plugin's folder (Pro-Q 3 presets in Pro-Q 4,

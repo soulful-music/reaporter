@@ -344,6 +344,12 @@ T["fabfilter: other layouts, versions and malformed files fail with the reason"]
   A.raises(function() fabfilter.to_state(F.ffp("FQ3p", 4, seq(358, function() return 0 end)), "/x/a.ffp", q4) end,
     "another plugin's preset layout (FQ3p)")
   local sat = ff_plugin("Saturn")
+  local t2 = ff_plugin("Timeless 2")
+  A.raises(function() fabfilter.to_state(F.ffp("FTms", 4, seq(705, function() return 0 end)), "/x/a.ffp", t2) end,
+    "Timeless 2 preset layout version 4 with 705 values: FabFilter's own re-saves")
+  A.truthy(fabfilter.to_state(F.ffp("FTms", 5, seq(705, function() return 0 end)), "/x/a.ffp", t2), "version 5 converts")
+  local ok, err = pcall(fabfilter.to_state, F.ffp("\255\0\200x", 4, seq(576, function() return 0 end)), "/x/a.ffp", q4)
+  A.eq({ ok, err }, { false, "another plugin's preset layout (0xff00c8" .. "78), not Pro-Q 4's" })
   A.raises(function() fabfilter.to_state(F.ffp("FSat", 2, seq(768, function() return 0 end)), "/x/a.ffp", sat) end,
     "version 2 with 768 values")
   A.raises(function() fabfilter.to_state(F.ffp("FSat", 4, seq(900, function() return 0 end)), "/x/a.ffp", sat) end,
