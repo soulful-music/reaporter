@@ -115,16 +115,16 @@ T["a re-run adds nothing and keeps the file"] = function()
 end
 
 T["the sidecar names the folder and keeps user records"] = function()
-  local tree = crp_tree({ Rooms = { ["Booth.crp_preset"] = "x" } })
+  local tree = crp_tree({ Rooms = { ["Cubby.crp_preset"] = "x" } })
   local env = env_for(tree)
   local liquid = require("reaporter.adapters.liquidsonics")
   local plugin = convert.discover({ liquid }, env)[1].plugins[1]
   local named = convert.presets(plugin, env.fs)
-  local file = ini.ini_bytes({ { "Booth", "\1" }, { "Mine", "\2" } })
+  local file = ini.ini_bytes({ { "Cubby", "\1" }, { "Mine", "\2" } })
   local existing = '{"presets": {"Mine": {"source": "captured", "tags": ["x"]}}}'
   local bytes, stats = convert.sidecar(liquid, plugin, named, file, existing, env.fs.read)
   A.eq(stats.imported, 1)
-  A.truthy(bytes:find('"Booth": {\n   "autoTags": [\n    "Rooms",\n    "room"\n   ],\n   "folder": [\n    "Rooms"\n   ],\n   "source": "factory:liquidsonics"', 1, true))
+  A.truthy(bytes:find('"Cubby": {\n   "autoTags": [\n    "Rooms",\n    "room"\n   ],\n   "folder": [\n    "Rooms"\n   ],\n   "source": "factory:liquidsonics"', 1, true))
   A.truthy(bytes:find('"Mine": {\n   "source": "captured"', 1, true))
 end
 

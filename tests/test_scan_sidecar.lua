@@ -38,8 +38,8 @@ T["naming: a repeated stem gets its folder, then a number"] = function()
 end
 
 T["sidecar: folder relative to the factory root"] = function()
-  A.eq(sidecar.folder_of(CRP .. "Factory Presets/Post/Small Rooms/Booth.crp_preset", ROOTS), { "Post", "Small Rooms" })
-  A.eq(sidecar.folder_of(CRP .. "Factory Presets/Amethyst Hall.crp_preset", ROOTS), {})
+  A.eq(sidecar.folder_of(CRP .. "Factory Presets/Scoring/Small Rooms/Cubby.crp_preset", ROOTS), { "Scoring", "Small Rooms" })
+  A.eq(sidecar.folder_of(CRP .. "Factory Presets/Glass Hall.crp_preset", ROOTS), {})
 end
 
 T["sidecar: a user root is filed under its own name"] = function()
@@ -53,7 +53,7 @@ T["sidecar: a library level is not a folder"] = function()
 end
 
 T["sidecar: folder segments, then vocabulary words from name and folder"] = function()
-  A.eq(sidecar.auto_tags("Vox Booth", { "Post", "Small Rooms" }, {}, VOCAB, {}), { "Post", "Small Rooms", "small", "room", "vocal" })
+  A.eq(sidecar.auto_tags("Vox Cubby", { "Scoring", "Small Rooms" }, {}, VOCAB, {}), { "Scoring", "Small Rooms", "small", "room", "vocal" })
 end
 
 T["sidecar: vendor fields first, numbering dropped"] = function()
@@ -80,10 +80,10 @@ T["sidecar: tags are cut to 40 characters, 32 at most"] = function()
 end
 
 T["sidecar: a re-import keeps the user's tags and favourite"] = function()
-  local old = { tags = { "Post", "Mine", "room" }, autoTags = { "Post", "room" }, favorite = true, source = "factory:liquidsonics" }
-  local new = sidecar.merge_record(old, { "Post", "Small Rooms" }, { "Post", "Small Rooms", "small" }, "factory:liquidsonics")
-  A.eq(new.tags, { "Mine", "Post", "Small Rooms", "small" })
-  A.eq(new.autoTags, { "Post", "Small Rooms", "small" })
+  local old = { tags = { "Scoring", "Mine", "room" }, autoTags = { "Scoring", "room" }, favorite = true, source = "factory:liquidsonics" }
+  local new = sidecar.merge_record(old, { "Scoring", "Small Rooms" }, { "Scoring", "Small Rooms", "small" }, "factory:liquidsonics")
+  A.eq(new.tags, { "Mine", "Scoring", "Small Rooms", "small" })
+  A.eq(new.autoTags, { "Scoring", "Small Rooms", "small" })
   A.eq(new.favorite, true)
 end
 
@@ -99,13 +99,13 @@ end
 
 T["sidecar: only listed names are written; other records kept"] = function()
   local existing = sidecar.decode('{"presets": {"Kept": {"tags": ["Bus"], "createdAt": 1729000000000}}, "x": 1}')
-  local out, stats = sidecar.build({ "Booth" }, {
-    { "Booth", CRP .. "Factory Presets/Rooms/Booth.crp_preset" },
+  local out, stats = sidecar.build({ "Cubby" }, {
+    { "Cubby", CRP .. "Factory Presets/Rooms/Cubby.crp_preset" },
     { "Not installed", CRP .. "Factory Presets/X.crp_preset" },
   }, ROOTS, existing, "factory:liquidsonics", nil, VOCAB)
   A.eq(stats.imported, 1)
   A.eq(sidecar.encode(out), table.concat({
-    '{', ' "presets": {', '  "Booth": {', '   "autoTags": [', '    "Rooms",', '    "room"', '   ],',
+    '{', ' "presets": {', '  "Cubby": {', '   "autoTags": [', '    "Rooms",', '    "room"', '   ],',
     '   "folder": [', '    "Rooms"', '   ],', '   "source": "factory:liquidsonics",', '   "tags": [',
     '    "Rooms",', '    "room"', '   ]', '  },', '  "Kept": {', '   "createdAt": 1729000000000,',
     '   "tags": [', '    "Bus"', '   ]', '  }', ' }', '}', '' }, "\n"))

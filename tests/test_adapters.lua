@@ -84,7 +84,7 @@ T["reverb foundry: same recipe, its own id"] = function()
 end
 
 T["eventide .tide: JSON text, 8 NULs, at least 1008 bytes"] = function()
-  local file = F.tide({ { "pluginID", '"ABCD"' }, { "pluginVer", '"3.8.21"' }, { "mmix", "33.3" } })
+  local file = F.tide({ { "pluginID", '"ABCD"' }, { "pluginVer", '"3.8.21"' }, { "mmix", "41.25" } })
   local fx_id, ver, progs, inner = unwrap(eventide.to_state(file .. "  \r\n", "/m/Eventide/X/a.tide"))
   A.eq({ fx_id, ver, progs }, { "ABCD", 0x030815, 0 })
   local state = juce_state(inner)
@@ -125,7 +125,7 @@ T["eventide .tidex: XML as a typed ValueTree, 8 NULs, no private data"] = functi
 end
 
 T["eventide .tidex: a non-numeric PARAM value fails"] = function()
-  local bad = F.tidex():gsub('value="0.25"', 'value="Fisn"')
+  local bad = F.tidex():gsub('value="0.25"', 'value="not-a-number"')
   A.raises(function() eventide.to_state(bad, "a.tidex") end, "float")
 end
 
@@ -139,14 +139,14 @@ T["eventide: one plugin per folder, snapshots skipped"] = function()
 end
 
 T["valhalla: copyXmlToBinary of the one-line XML"] = function()
-  local file = F.vpreset("ValhallaVintageVerb", { { "pluginVersion", "3.0.0" }, { "presetName", "A &quot;Q&quot; &amp; B" }, { "Mix", "0.5" } })
+  local file = F.vpreset("ValhallaVintageVerb", { { "pluginVersion", "9.8.7" }, { "presetName", "A &quot;Q&quot; &amp; B" }, { "Mix", "0.5" } })
   local fs = F.memfs("/c", { ["Valhalla DSP, LLC"] = { ValhallaVintageVerb = { Presets = {} }, Other = {} } })
   local plugin = valhalla.plugins({ dirs = { common = "/c" }, fs = fs })
   A.eq(#plugin, 1)
   local fx_id, ver, progs, inner = unwrap(valhalla.to_state(file, "x.vpreset", plugin[1]))
   A.eq({ fx_id, ver, progs }, { "vee3", 0, 0 })
   local state = juce_state(inner)
-  local x = '<?xml version="1.0" encoding="UTF-8"?> <ValhallaVintageVerb pluginVersion="3.0.0" presetName=\'A "Q" &amp; B\' Mix="0.5"/>'
+  local x = '<?xml version="1.0" encoding="UTF-8"?> <ValhallaVintageVerb pluginVersion="9.8.7" presetName=\'A "Q" &amp; B\' Mix="0.5"/>'
   A.eq(state, "VC2!" .. string.pack("<I4", #x) .. x .. ("\0"):rep(9))
 end
 
@@ -174,7 +174,7 @@ T["relab: a v4 preset fills the tagged float blocks"] = function()
   end
   A.eq(blocks.tsrp[4], 1.0)
   A.eq(blocks["2srp"][96], 24.0)
-  A.eq({ blocks.srpn[2], blocks.srpn[10], blocks.srpn[11], blocks.srpn[25] }, { 2.0, 2.0, 5.0, 2.0 })
+  A.eq({ blocks.srpn[2], blocks.srpn[10], blocks.srpn[11], blocks.srpn[25] }, { 3.5, 3.5, 5.0, 3.5 })
   A.eq({ blocks.IUG_[9], blocks.IUG_[10] }, { 1.0, 120.0 })
   local name = ":Macintosh HD:c:Relab Development:LX480:Presets:Hall:A.lx480"
   A.eq(comp:sub(o), "MNSP" .. string.pack("<I4", #name) .. name .. ("\0"):rep(16) .. "JUCEPrivateData")

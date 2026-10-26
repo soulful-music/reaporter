@@ -64,7 +64,7 @@ function M.lx480(opts)
   end
   lines[#lines + 1] = "    <Session>"
   for _, f in ipairs(opts.session or { "EngineMode", "GainInputLeft", "TempoSyncEnableTwinDelay" }) do
-    lines[#lines + 1] = ('        <%s Value="2" />'):format(f)
+    lines[#lines + 1] = ('        <%s Value="3.5" />'):format(f)
   end
   lines[#lines + 1] = "    </Session>"
   lines[#lines + 1] = '    <Info><Version Value="2" /></Info>'
@@ -73,11 +73,11 @@ function M.lx480(opts)
 end
 
 function M.legacy_lx480()
-  return '<?xml version="1.0" ?>\n<Preset>\n    <Preset>\n        <Size Value="37" />\n    </Preset>\n</Preset>\n'
+  return '<?xml version="1.0" ?>\n<Preset>\n    <Preset>\n        <Spread Value="0.123" />\n    </Preset>\n</Preset>\n'
 end
 
 function M.toy(widget)
-  return "WIDGET = " .. widget .. ";\rVERSION = 4;\rPRESET =01010000160801010004]7Q;58^XcMW;\r"
+  return "WIDGET = " .. widget .. ";\rVERSION = 4;\rPRESET =ReaPorter synthetic archive;\r"
 end
 
 -- An in-memory file system: tree = {name = bytes | subtree}. fs.list / fs.is_dir / fs.read
