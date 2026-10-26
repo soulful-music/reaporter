@@ -84,62 +84,75 @@ function M.ini_bytes(entries, eol)
   return table.concat(lines, eol) .. eol
 end
 
--- Split bytes into lines at \n, \r\n or \r, each keeping its terminator.
-local function split_keepends(s)
-  local out, i, n = {}, 1, #s
-  while i <= n do
-    local j = s:find("[\r\n]", i)
-    if not j then
-      out[#out + 1] = s:sub(i)
-      break
-    end
-    if s:sub(j, j + 1) == "\r\n" then j = j + 1 end
-    out[#out + 1] = s:sub(i, j)
-    i = j + 1
-  end
-  return out
-end
-
-local function strip_eol(l) return (l:gsub("[\r\n]+$", "")) end
-
--- The names REAPER lists from a preset file: entries [Preset0] .. [Preset{NbPresets-1}],
--- the first section of each number, its first Name=; none without a readable NbPresets.
-function M.listed_names(data)
-  local body = text.starts_with(data, BOM) and data:sub(4) or data
-  local section, nb, names, seen_general = nil, nil, {}, false
-  local start = 1
-  while start <= #body + 1 do
+-- The one reading of a preset file's sections and keys, shared by listed_names and the
+-- merge so both see the same entries. Lines end at LF (a CR before it is trimmed);
+-- leading and trailing ASCII whitespace is trimmed; a line starting "[" with a "]" is a
+-- section, named by what lies between them; section and key names ignore case. Of
+-- [General] and of each [PresetK], the first counts, and of their keys the first. Data
+-- values are never copied, so a 200 MB file reads in a few hundredths of a second. Returns
+-- {nb_value, nb_eq and nb_to (where the NbPresets value lies), names = {[K] = first Name=
+-- or false}, numbers (every K seen, in order), dups (repeated section names)}.
+local function read(body)
+  local r = { names = {}, numbers = {}, dups = {} }
+  local section, seen_general = nil, false
+  local start, n = 1, #body
+  while start <= n do
     local nl = body:find("\n", start, true)
-    local raw = body:sub(start, (nl or #body + 1) - 1)
-    start = (nl or #body + 1) + 1
-    local line = text.strip_ascii(raw)
-    if line:sub(1, 1) == "[" and line:find("]", 1, true) then
-      local name = text.strip_ascii(line:sub(2, line:find("]", 1, true) - 1))
-      local num = name:lower():match("^preset(%d+)$")
-      if name:lower() == "general" and not seen_general then
-        section, seen_general = "general", true
-      elseif num and names[tonumber(num)] == nil then
-        section = tonumber(num)
-        names[section] = false
-      else
-        section = nil
-      end
-    elseif line:find("=", 1, true) then
-      local key, value = line:match("^(.-)=(.*)$")
-      key = text.strip_ascii(key):lower()
-      if section == "general" and key == "nbpresets" and nb == nil then
-        local v = text.strip_ascii(value)
-        nb = v:match("^%d+$") and tonumber(v) or -1
-      elseif math.type(section) == "integer" and key == "name" and names[section] == false then
-        names[section] = text.strip_ascii(value)
+    local stop = (nl or n + 1) - 1
+    local c = body:find("[^ \t\r\v\f]", start)
+    if c and c <= stop then
+      local close = body:byte(c) == 91 and body:find("]", c, true)
+      if close and close <= stop then
+        local name = text.strip_ascii(body:sub(c + 1, close - 1)):lower()
+        local num = name:match("^preset(%d+)$")
+        if name == "general" then
+          if seen_general then r.dups[#r.dups + 1] = "[General]" end
+          section = not seen_general and "general" or nil
+          seen_general = true
+        elseif num then
+          local k = tonumber(num)
+          r.numbers[#r.numbers + 1] = k
+          if r.names[k] == nil then
+            section = k
+            r.names[k] = false
+          else
+            r.dups[#r.dups + 1] = "[Preset" .. num .. "]"
+            section = nil
+          end
+        else
+          section = nil
+        end
+      elseif section ~= nil then
+        local eq = body:find("=", c, true)
+        if eq and eq <= stop then
+          local key = text.strip_ascii(body:sub(c, eq - 1)):lower()
+          if section == "general" and key == "nbpresets" and r.nb_value == nil then
+            r.nb_value, r.nb_eq, r.nb_to = body:sub(eq + 1, stop), eq, stop
+          elseif math.type(section) == "integer" and key == "name" and r.names[section] == false then
+            r.names[section] = text.strip_ascii(body:sub(eq + 1, stop))
+          end
+        end
       end
     end
     if not nl then break end
+    start = nl + 1
   end
-  if nb == nil or nb < 0 then return {} end
+  return r
+end
+
+local function body_of(data)
+  return text.starts_with(data, BOM) and data:sub(4) or data
+end
+
+-- The names REAPER lists from a preset file: entries [Preset0] .. [Preset{NbPresets-1}],
+-- as `read` sees them; none without a readable NbPresets.
+function M.listed_names(data)
+  local r = read(body_of(data))
+  local nb = r.nb_value and text.strip_ascii(r.nb_value):match("^%d+$") and tonumber(r.nb_value)
+  if not nb then return {} end
   local out = {}
   for k = 0, nb - 1 do
-    if names[k] and names[k] ~= "" then out[#out + 1] = names[k] end
+    if r.names[k] and r.names[k] ~= "" then out[#out + 1] = r.names[k] end
   end
   return out
 end
@@ -189,45 +202,49 @@ function M.preset_file_name(fx_name)
   return "vst3-" .. name .. ".ini"
 end
 
--- Scan an existing file for what a merge needs. Returns {lines, nb_at, nb, taken} or
--- raises for a file the merge must not touch: [PresetK] without a readable NbPresets,
--- or an entry past it. `taken` holds every entry name, lowercased.
+-- Scan an existing file for what a merge needs. Returns {body, bom, nb, nb_eq, nb_to, taken} or
+-- raises for a file the merge must not touch, where a guess could lose an entry: a CR
+-- not followed by LF, no NbPresets or one that is not a whole number, a repeated
+-- section, or an entry past NbPresets. `taken` holds every entry name, lowercased.
 function M.inspect(existing)
-  local body = text.starts_with(existing, BOM) and existing:sub(4) or existing
-  local lines = split_keepends(body)
-  local section, nb_at, nb, presets, names = nil, nil, nil, {}, {}
-  for i, raw in ipairs(lines) do
-    local line = strip_eol(raw)
-    local s = line:match("^%[(.+)%]%s*$")
-    if s then
-      section = s
-      local k = s:match("^Preset(%d+)$")
-      if k then presets[#presets + 1] = tonumber(k) end
-    elseif line:find("=", 1, true) then
-      local key, value = line:match("^(.-)=(.*)$")
-      local lkey = text.strip_ascii(key):lower()
-      if section == "General" and lkey == "nbpresets" and nb_at == nil then
-        nb_at, nb = i, text.parse_int(value)
-      elseif section and text.starts_with(section, "Preset") and lkey == "name" then
-        names[section] = text.strip(value)
-      end
+  local body = body_of(existing)
+  local cr = body:find("\r", 1, true)
+  while cr do
+    if body:byte(cr + 1) ~= 10 then
+      error("a line ends in CR alone; REAPER's own files end lines in CRLF or LF", 0)
     end
+    cr = body:find("\r", cr + 2, true)
   end
-  if nb == nil then error("no readable NbPresets", 0) end
+  local r = read(body)
+  if r.nb_value == nil then error("no readable NbPresets", 0) end
+  if not r.nb_value:find("^%s*%d+%s*$") then
+    error(("NbPresets=%s is not a whole number"):format(r.nb_value), 0)
+  end
+  local nb = math.tointeger(tonumber(r.nb_value))
+  if not nb then error(("NbPresets=%s is out of range"):format(r.nb_value), 0) end
+  if #r.dups > 0 then error("repeated sections: " .. table.concat(r.dups, ", "), 0) end
   local past = {}
-  table.sort(presets)
-  for _, k in ipairs(presets) do
-    if k >= nb and past[#past] ~= k then past[#past + 1] = k end
+  for _, k in ipairs(r.numbers) do
+    if k >= nb then past[#past + 1] = k end
   end
+  table.sort(past)
   if #past > 0 then
     error(("entries past NbPresets=%d: %s"):format(nb, table.concat(past, ", ")), 0)
   end
   local taken = {}
   for k = 0, nb - 1 do
-    local n = names["Preset" .. k]
-    if n then taken[text.lower(n)] = true end
+    local name = r.names[k]
+    if name then taken[text.lower(name)] = true end
   end
-  return { body = body, bom = body ~= existing, lines = lines, nb_at = nb_at, nb = nb, taken = taken }
+  return { body = body, bom = body ~= existing, nb = nb, nb_eq = r.nb_eq, nb_to = r.nb_to, taken = taken }
+end
+
+-- The last line of `s` with its terminator.
+local function last_line(s)
+  local i = #s
+  if s:byte(i) == 10 then i = i - 1 end
+  while i > 0 and s:byte(i) ~= 10 do i = i - 1 end
+  return s:sub(i + 1)
 end
 
 -- Append {{name, data}, ...} to a preset file's bytes, keeping every existing byte except
@@ -253,15 +270,12 @@ function M.merge(existing, entries)
     end
   end
   if #add == 0 then return existing, {}, skipped end
-  local lines = f.lines
-  local old = lines[f.nb_at]
-  local bare = strip_eol(old)
-  local term = old:sub(#bare + 1)
-  local a, b = bare:find("%d+")
-  lines[f.nb_at] = bare:sub(1, a - 1) .. tostring(f.nb + #add) .. bare:sub(b + 1) .. term
-  local out = table.concat(lines)
-  if out ~= "" and out:sub(-1) ~= "\n" then out = out .. eol end
-  if #lines > 0 and text.strip_ascii(lines[#lines]) ~= "" then out = out .. eol end
+  local value = f.body:sub(f.nb_eq + 1, f.nb_to)
+  local a, b = value:find("%d+")
+  local out = f.body:sub(1, f.nb_eq) .. value:sub(1, a - 1) .. tostring(f.nb + #add) .. value:sub(b + 1)
+    .. f.body:sub(f.nb_to + 1)
+  if out:sub(-1) ~= "\n" then out = out .. eol end
+  if text.strip_ascii(last_line(f.body)) ~= "" then out = out .. eol end
   local tail = table.concat(M.entry_lines(add, f.nb), eol) .. eol
   return (f.bom and BOM or "") .. out .. tail, added, skipped
 end

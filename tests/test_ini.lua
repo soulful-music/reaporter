@@ -72,4 +72,55 @@ T["merge refuses a file it must not touch"] = function()
   end, "past NbPresets")
 end
 
+-- After a merge, REAPER's index lists the old names, then the new ones: the merge and
+-- listed_names read the file the same way.
+local function agrees(file, new_names)
+  local entries = {}
+  for _, n in ipairs(new_names) do entries[#entries + 1] = { n, "\1" } end
+  local out = ini.merge(file, entries)
+  local want = ini.listed_names(file)
+  for _, n in ipairs(new_names) do want[#want + 1] = n end
+  A.eq(ini.listed_names(out), want)
+end
+
+T["merge and listed names: sections and keys ignore case alike"] = function()
+  local file = "[general]\nnbpresets=1\n[preset0]\nNAME=Warm\n"
+  A.eq(ini.inspect(file).taken, { warm = true })
+  agrees(file, { "Cold" })
+  A.eq(select(3, ini.merge(file, { { "WARM", "\1" } })), { "WARM" })
+end
+
+T["merge and listed names: the first Name= of an entry counts for both"] = function()
+  local file = "[General]\nNbPresets=1\n[Preset0]\nName=First\nName=Second\n"
+  A.eq(ini.listed_names(file), { "First" })
+  A.eq(ini.inspect(file).taken, { first = true })
+  agrees(file, { "Second" })
+end
+
+T["merge refuses a file where the readings could disagree"] = function()
+  A.raises(function() ini.merge("[General]\nNbPresets=1\n[Preset0]\nName=A\n[Preset0]\nName=B\n", { { "C", "x" } }) end,
+    "repeated sections: [Preset0]")
+  A.raises(function() ini.merge("[General]\nNbPresets=1\n[Preset0]\nName=A\n[general]\nNbPresets=5\n", { { "C", "x" } }) end,
+    "repeated sections: [General]")
+  A.raises(function() ini.merge("[General]\nNbPresets=1\n[Preset0]\nName=A\n[preset1]\nName=Z\n", { { "C", "x" } }) end,
+    "entries past NbPresets=1: 1")
+end
+
+T["merge refuses an NbPresets that is not a whole number"] = function()
+  for _, v in ipairs({ "+1", "1_0", "1x", "", "-1", "1.0" }) do
+    A.raises(function() ini.merge("[General]\nNbPresets=" .. v .. "\n[Preset0]\nName=A\n", { { "C", "x" } }) end,
+      "NbPresets")
+  end
+  agrees("[General]\nNbPresets= 1 \t\n[Preset0]\nName=A\n", { "C" })
+end
+
+T["merge refuses CR-only line ends instead of mixing them"] = function()
+  local cr = "[General]\rNbPresets=1\r[Preset0]\rName=A\r"
+  A.eq(ini.listed_names(cr), {})
+  A.raises(function() ini.merge(cr, { { "C", "x" } }) end, "CR alone")
+  A.raises(function() ini.merge("[General]\r\nNbPresets=1\r\n[Preset0]\rName=A\r\n", { { "C", "x" } }) end, "CR alone")
+  local lf = ini.merge("[General]\nNbPresets=1\n[Preset0]\nName=A\n", { { "C", "x" } })
+  A.truthy(not lf:find("\r", 1, true), "an LF file stays LF")
+end
+
 return T
