@@ -123,4 +123,21 @@ T["a failing probe still removes its track and restores refresh and undo"] = fun
   R.sh("rm -rf '" .. top .. "'")
 end
 
+T["ticks and open vendors are saved when they change, before any Convert"] = function()
+  local top, res, home = setup({ Blackhole = { "Alpha" }, Spring = { "Boing" } })
+  local stub = R.reaper({ resource = res, root = top, fx = FX })
+  R.run_main(stub, nil, home, { { "Eventide  (", true }, { "Blackhole##", false } }, 40)
+  A.eq(stub.ext["ReaPorter/ticked"], "VST3: Spring (Eventide)")
+  local known = "\n" .. stub.ext["ReaPorter/known"] .. "\n"
+  A.truthy(known:find("\n" .. BH .. "\n", 1, true) and known:find("\nVST3: Spring (Eventide)\n", 1, true), known)
+  A.eq(stub.ext["ReaPorter/open"], "Eventide")
+  A.eq(R.tree(res), { "reaper-vstplugins_arm64.ini" })
+  local again = R.reaper({ resource = res, root = top, fx = FX })
+  for k, v in pairs(stub.ext) do again.ext[k] = v end
+  R.run_main(again, nil, home, { { "Eventide  (", false } }, 40)
+  A.eq(again.ext["ReaPorter/open"], "")
+  A.eq(again.ext["ReaPorter/ticked"], "VST3: Spring (Eventide)")
+  R.sh("rm -rf '" .. top .. "'")
+end
+
 return T

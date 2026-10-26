@@ -165,6 +165,14 @@ local function save_set(key, set)
   reaper.SetExtState(EXT, key, table.concat(names, "\n"), true)
 end
 
+-- Ticks, the plugins seen before (a new one is ticked once) and the sidecar option are
+-- saved whenever they change, as is each vendor's open state.
+local function save_ticks()
+  save_set("ticked", S.ticked)
+  save_set("known", S.known)
+  reaper.SetExtState(EXT, "sidecar", S.sidecar and "1" or "0", true)
+end
+
 local function save_open()
   local set = {}
   for v, o in pairs(S.open) do
@@ -219,6 +227,7 @@ local function scan_one(p)
   end
   if not S.known[p.fx_name] then
     S.known[p.fx_name] = true
+    S.scan_seen_new = true
     if available(p) and adds(p) > 0 then S.ticked[p.fx_name] = true end
   end
 end
@@ -240,10 +249,8 @@ local function start_convert()
   S.stamp = os.date("%Y%m%d-%H%M%S")
   S.total, S.done_count = 0, 0
   for _, p in ipairs(list) do S.total = S.total + adds(p) end
-  save_set("ticked", S.ticked)
-  save_set("known", S.known)
+  save_ticks()
   save_open()
-  reaper.SetExtState(EXT, "sidecar", S.sidecar and "1" or "0", true)
   S.phase = "converting"
 end
 
@@ -396,7 +403,10 @@ local function draw_plugin(p)
   ImGui.BeginDisabled(ctx, not ok or S.phase ~= "ready")
   local ch, tv = ImGui.Checkbox(ctx, plugin_label(p) .. "##" .. p.fx_name, ok and S.ticked[p.fx_name] or false)
   ImGui.EndDisabled(ctx)
-  if ch then S.ticked[p.fx_name] = tv or nil end
+  if ch then
+    S.ticked[p.fx_name] = tv or nil
+    save_ticks()
+  end
   if p.problem then
     ImGui.TableNextColumn(ctx)
     ImGui.TextDisabled(ctx, p.problem)
@@ -457,6 +467,7 @@ local function draw_list()
         for _, p in ipairs(g.plugins) do
           if available(p) then S.ticked[p.fx_name] = v or nil end
         end
+        save_ticks()
       end
       ImGui.SameLine(ctx)
       if S.open[vendor] == nil then S.open[vendor] = not S.open_saved and #S.groups <= 3 end
@@ -545,7 +556,11 @@ local function draw()
       if not ok then S.rows[S.scan_next].problem = "scan failed: " .. tostring(err) end
       S.scan_next = S.scan_next + 1
     end
-    if S.scan_next > #S.rows then S.phase = "ready" end
+    if S.scan_next > #S.rows then
+      S.phase = "ready"
+      if S.scan_seen_new then save_ticks() end
+      S.scan_seen_new = nil
+    end
   elseif S.phase == "converting" then
     convert_tick()
   end
@@ -577,7 +592,10 @@ local function draw()
   if S.mixsurface then
     ImGui.BeginDisabled(ctx, S.phase ~= "ready")
     local ch, v = ImGui.Checkbox(ctx, "Write MixSurface folders and tags", S.sidecar)
-    if ch then S.sidecar = v end
+    if ch then
+      S.sidecar = v
+      save_ticks()
+    end
     ImGui.EndDisabled(ctx)
   end
 

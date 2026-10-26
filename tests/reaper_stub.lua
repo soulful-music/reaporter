@@ -45,19 +45,48 @@ function M.tree(dir)
 end
 
 -- ReaImGui: constants are 0, calls return what keeps the window drawing every branch.
-local IMGUI_RETURNS = {
-  Begin = { true, true },
-  BeginTable = { true },
-  BeginChild = { true },
-  TreeNodeEx = { true },
-  TreeNode = { true },
-  GetContentRegionAvail = { 600, 400 },
-  GetFrameHeightWithSpacing = { 20 },
-  Checkbox = function(_, _, v) return false, v end,
-  InputTextWithHint = function(_, _, _, v) return false, v end,
-}
-
-local function imgui()
+-- clicks = {{label part, value}, ...}: the first enabled Checkbox or TreeNodeEx whose label
+-- holds the part takes the click and returns the value, as a user's click would.
+local function imgui(clicks)
+  clicks = clicks or {}
+  local disabled = {} -- BeginDisabled's stack
+  local next_open
+  local function click(label)
+    local c = clicks[1]
+    for _, d in ipairs(disabled) do
+      if d then return false end
+    end
+    if c and label:find(c[1], 1, true) then
+      table.remove(clicks, 1)
+      return true, c[2]
+    end
+    return false
+  end
+  local IMGUI_RETURNS = {
+    Begin = { true, true },
+    BeginTable = { true },
+    BeginChild = { true },
+    TreeNode = { true },
+    GetContentRegionAvail = { 600, 400 },
+    GetFrameHeightWithSpacing = { 20 },
+    BeginDisabled = function(_, d) disabled[#disabled + 1] = d ~= false end,
+    EndDisabled = function() disabled[#disabled] = nil end,
+    Checkbox = function(_, label, v)
+      local hit, nv = click(label)
+      if hit then return true, nv end
+      return false, v
+    end,
+    SetNextItemOpen = function(_, o) next_open = o end,
+    TreeNodeEx = function(_, _, label)
+      local o = next_open
+      next_open = nil
+      local hit, nv = click(label)
+      if hit then return nv end
+      if o == nil then return true end
+      return o
+    end,
+    InputTextWithHint = function(_, _, _, v) return false, v end,
+  }
   return setmetatable({}, {
     __index = function(t, k)
       if k:find("_") then
@@ -151,9 +180,10 @@ function M.reaper(opts)
   })
 end
 
--- Run main.lua with the stub and the QA hook until its window closes. home: the folder
--- os.getenv("HOME") returns meanwhile. Returns the report's text.
-function M.run_main(stub, qa, home)
+-- Run main.lua with the stub and the QA hook until its window closes, or for `frames`
+-- frames when given. home: the folder os.getenv("HOME") returns meanwhile; clicks: as
+-- for imgui. Returns the report's text.
+function M.run_main(stub, qa, home, clicks, frames)
   local fx = (arg[0]:match("^(.*)/[^/]*$") or ".") .. "/../FX"
   local saved_getenv = os.getenv
   local saved_reaper, saved_qa = rawget(_G, "reaper"), rawget(_G, "REAPORTER_QA")
@@ -161,22 +191,22 @@ function M.run_main(stub, qa, home)
   for k in pairs(package.loaded) do
     if k:find("^reaporter%.main") then package.loaded[k] = nil end
   end
-  package.preload.imgui = function() return function() return imgui() end end
+  package.preload.imgui = function() return function() return imgui(clicks) end end
   package.loaded.imgui = nil
   rawset(_G, "reaper", stub)
   rawset(_G, "REAPORTER_QA", qa)
   os.getenv = function(k) if k == "HOME" then return home end return saved_getenv(k) end
   local ok, err = pcall(function()
     dofile(fx .. "/reaporter/main.lua")
-    local frames = 0
     local st = stub.state
-    while st.deferred and frames < 5000 do
+    local n = 0
+    while st.deferred and n < (frames or 5000) do
       local f = st.deferred
       st.deferred = nil
       f()
-      frames = frames + 1
+      n = n + 1
     end
-    if st.deferred then error("the window never closed", 0) end
+    if st.deferred and not frames then error("the window never closed", 0) end
   end)
   os.getenv = saved_getenv
   rawset(_G, "reaper", saved_reaper)
@@ -185,7 +215,7 @@ function M.run_main(stub, qa, home)
   package.loaded.imgui = nil
   if not ok then error(err, 0) end
   if stub.state.console then error("console: " .. stub.state.console, 0) end
-  return M.read(qa.report)
+  return qa and M.read(qa.report)
 end
 
 return M
