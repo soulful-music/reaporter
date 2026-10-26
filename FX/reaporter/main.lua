@@ -14,6 +14,12 @@ local FRAME_BUDGET = 0.025 -- seconds of conversion work per UI frame
 -- = path, close, search, hold}. It ticks those plugins, converts, writes a report and
 -- closes; with `hold` it only types `search` and leaves the list open.
 local QA = rawget(_G, "REAPORTER_QA")
+-- QA.demo paces the same run for a screen recording: {window = {x, y, w, h}, bounds = path
+-- (the window's rectangle, written when it appears), start (s before the scan), scan_rate
+-- (plugins per frame), delay (s between steps), steps = {{"open"|"close", vendor, wait} |
+-- {"tick", fx name, wait} | {"convert"}} (wait: s after this step, for delay), convert_budget
+-- (s of work per frame), hold (s on the results before the report)}.
+local DEMO = QA and QA.demo
 
 if not reaper.ImGui_GetBuiltinPath then
   reaper.MB("ReaPorter needs the ReaImGui extension (0.9 or newer).\n\n"
@@ -207,6 +213,10 @@ local function start_scan()
   end
   S.ticked, S.known = load_set("ticked"), load_set("known")
   S.open, S.open_saved = load_set("open"), reaper.HasExtState(EXT, "open")
+  if DEMO then
+    S.ticked, S.open, S.open_saved = {}, {}, true
+    for _, p in ipairs(S.rows) do S.known[p.fx_name] = true end
+  end
   S.mixsurface = fs.is_dir(RESOURCE .. "/MixSurface")
   S.scan_next = 1
   S.phase = "scan"
@@ -340,7 +350,7 @@ end
 
 -- One frame of conversion work.
 local function convert_tick()
-  local deadline = reaper.time_precise() + FRAME_BUDGET
+  local deadline = reaper.time_precise() + (DEMO and DEMO.convert_budget or FRAME_BUDGET)
   local function more() return reaper.time_precise() < deadline end
   while more() do
     if S.current then
@@ -406,6 +416,10 @@ local function draw_plugin(p)
   if ch then
     S.ticked[p.fx_name] = tv or nil
     save_ticks()
+  end
+  if S.focus == p.fx_name then
+    ImGui.SetScrollHereY(ctx, 0.5)
+    S.focus = nil
   end
   if p.problem then
     ImGui.TableNextColumn(ctx)
@@ -549,9 +563,10 @@ local function draw_results()
 end
 
 local function draw()
-  if S.phase == "scan" then
+  if S.phase == "scan" and not (DEMO and reaper.time_precise() < (DEMO.scan_at or math.huge)) then
     local deadline = reaper.time_precise() + FRAME_BUDGET
-    while S.scan_next <= #S.rows and reaper.time_precise() < deadline do
+    local last = DEMO and S.scan_next + DEMO.scan_rate - 1 or #S.rows
+    while S.scan_next <= math.min(last, #S.rows) and reaper.time_precise() < deadline do
       local ok, err = pcall(scan_one, S.rows[S.scan_next])
       if not ok then S.rows[S.scan_next].problem = "scan failed: " .. tostring(err) end
       S.scan_next = S.scan_next + 1
@@ -615,12 +630,37 @@ local function draw()
   end
 end
 
+-- The paced steps of QA.demo, one every `delay` seconds once the scan is done.
+local function demo_step()
+  local now = reaper.time_precise()
+  if S.phase ~= "ready" or DEMO.converting then return end
+  DEMO.next_at = DEMO.next_at or now + DEMO.delay
+  if now < DEMO.next_at then return end
+  DEMO.step = (DEMO.step or 0) + 1
+  local what, arg, wait = table.unpack(DEMO.steps[DEMO.step] or { "convert" })
+  if what == "open" or what == "close" then
+    S.open[arg] = what == "open"
+  elseif what == "tick" then
+    S.ticked[arg], S.focus = true, arg
+  else
+    if QA.sidecar ~= nil then S.sidecar = QA.sidecar end
+    DEMO.converting = true
+    start_convert()
+  end
+  DEMO.next_at = now + (wait or DEMO.delay)
+end
+
 local function qa_step()
+  if DEMO and S.phase ~= "done" then return demo_step() end
+  if DEMO and S.phase == "done" then
+    DEMO.done_at = DEMO.done_at or reaper.time_precise()
+    if reaper.time_precise() < DEMO.done_at + DEMO.hold then return end
+  end
   if QA.hold then
     S.search = QA.search or ""
     return
   end
-  if S.phase == "ready" and not QA.started then
+  if S.phase == "ready" and not QA.started and not DEMO then
     QA.started = true
     S.ticked = {}
     for _, n in ipairs(QA.plugins) do S.ticked[n] = true end
@@ -651,7 +691,22 @@ end
 
 local function loop()
   ImGui.SetNextWindowSize(ctx, 700, 520, ImGui.Cond_FirstUseEver)
-  local visible, open = ImGui.Begin(ctx, "ReaPorter", true)
+  local flags = ImGui.WindowFlags_None
+  if DEMO then
+    local x, y, w, h = table.unpack(DEMO.window)
+    ImGui.SetNextWindowPos(ctx, x, y, ImGui.Cond_Always)
+    ImGui.SetNextWindowSize(ctx, w, h, ImGui.Cond_Always)
+    flags = ImGui.WindowFlags_TopMost
+  end
+  local visible, open = ImGui.Begin(ctx, "ReaPorter", true, flags)
+  if visible and DEMO and not DEMO.scan_at then
+    local x, y = ImGui.GetWindowPos(ctx)
+    local w, h = ImGui.GetWindowSize(ctx)
+    local f = assert(io.open(DEMO.bounds, "w"))
+    f:write(("%d %d %d %d\n"):format(x, y, w, h))
+    f:close()
+    DEMO.scan_at = reaper.time_precise() + DEMO.start
+  end
   if visible then
     local ok, err = xpcall(draw, debug.traceback)
     ImGui.End(ctx)
