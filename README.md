@@ -54,11 +54,13 @@ What it guarantees:
 - **One bad preset doesn't stop the rest.** A file that fails to convert is listed with the
   reason; the other presets of that plugin and the other plugins carry on.
 
-A preset that failed to convert is remembered (its path, size and checksum, in
-`<resource>/presets/ReaPorter-failed.json`). The next scan counts it under "Can't convert",
+A preset that failed to convert because of its contents is remembered (its plugin, path,
+size and checksum, in `<resource>/presets/ReaPorter-failed.json`); a failure that depends on
+REAPER or its plugin list, such as a missing VST2 id, is not, and is tried again. The next scan counts it under "Can't convert",
 with the reason on hover, not as new, and Convert does not try it again. A file that changes,
 or a new ReaPorter version, gets tried again. A plugin whose only presets left are ones that
-can't convert shows 0 new and is not ticked.
+can't convert shows 0 new and is not ticked, also when REAPER lists the plugin under another
+name and its preset file is only resolved on Convert.
 
 Preset names are the file names. When two files share a name, the folder is added:
 `Big Hall (Vocals)`.

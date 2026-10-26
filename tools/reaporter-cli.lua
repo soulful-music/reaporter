@@ -64,7 +64,6 @@ for _, n in ipairs(plugin_list.file_names(os_name)) do
 end
 
 local failed_store = failed.decode(fs.read(presets_dir .. "/" .. failed.FILE))
-local known = failed.checker(failed_store, fs.read)
 local failed_changed = false
 
 local env = { os = os_name, dirs = convert.dirs(os_name, os.getenv("HOME")), fs = fs, vst3 = vst3 }
@@ -80,7 +79,7 @@ for _, g in ipairs(groups) do
       local named, unreadable = convert.presets(p, fs)
       local ini_in = presets_dir .. "/" .. p.ini_name
       if cmd == "list" then
-        local c = plan.dry_run(fs, ini_in, named, known)
+        local c = plan.dry_run(fs, ini_in, named, failed.checker(failed_store, fs.read, p.fx_name))
         print(("%s\t%s\tfound %d\tnew %d\texist %d\tcan't convert %d%s"):format(g.adapter.vendor, p.fx_name, c.found,
           c.new or 0, c.exist or 0, c.failed or 0, (p.problem and "\t" .. p.problem or "") .. (c.error and "\t" .. c.error or "")))
       elseif p.listing and not p.problem then

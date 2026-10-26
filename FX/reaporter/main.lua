@@ -194,9 +194,9 @@ local function available(p)
   return not p.problem and p.counts and not p.counts.error and p.counts.found > 0
 end
 
--- The presets a ticked plugin adds: the dry run's new (known failures left out), or every
--- one found while its preset file is resolved on Convert.
-local function adds(p) return p.counts.new or p.counts.found end
+-- The presets a ticked plugin adds: the dry run's new, or, while its preset file is
+-- unresolved until Convert, every one found less the known failures.
+local function adds(p) return p.counts.new or p.counts.found - (p.counts.failed or 0) end
 
 local function start_scan()
   local env = {
@@ -221,7 +221,6 @@ local function start_scan()
   end
   S.mixsurface = fs.is_dir(RESOURCE .. "/MixSurface")
   S.failed = failed.decode(fs.read(FAILED))
-  S.known_failed = failed.checker(S.failed, fs.read)
   S.scan_next = 1
   S.phase = "scan"
 end
@@ -234,10 +233,14 @@ local function scan_one(p)
     p.problem, p.unresolved = nil, true
   end
   p.named = convert.presets(p, fs)
+  local known = failed.checker(S.failed, fs.read, p.fx_name)
   if p.unresolved then
-    p.counts = { found = #p.named }
+    -- No preset file to compare names with yet (new and exist stay unknown), but known
+    -- failures need only the files.
+    local c = convert.dry_run(p.named, nil, known)
+    p.counts = { found = c.found, failed = c.failed, reasons = c.reasons }
   else
-    p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named, S.known_failed)
+    p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named, known)
   end
   if not S.known[p.fx_name] then
     S.known[p.fx_name] = true
@@ -262,6 +265,7 @@ local function start_convert()
   S.queue, S.results, S.current = list, {}, nil
   S.stamp = os.date("%Y%m%d-%H%M%S")
   S.total, S.done_count = 0, 0
+  S.failed_error = nil
   for _, p in ipairs(list) do S.total = S.total + adds(p) end
   save_ticks()
   save_open()
@@ -316,7 +320,8 @@ local function next_job()
     end
   end
   local nknown
-  if ok then ok, fresh_named, nknown = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named, S.known_failed) end
+  if ok then ok, fresh_named, nknown = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named,
+    failed.checker(S.failed, fs.read, p.fx_name)) end
   if not ok then
     add_result(p, { written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) })
     return true
@@ -465,7 +470,8 @@ local function draw_plugin(p)
     ImGui.TextDisabled(ctx, "resolved on Convert")
     if ImGui.IsItemHovered(ctx) then
       ImGui.SetTooltip(ctx, "REAPER names this plugin " .. p.listing.fx_name
-        .. ": Convert asks REAPER for its preset file, then counts what is new.")
+        .. ": Convert asks REAPER for its preset file, then counts what is new."
+        .. ((p.counts.failed or 0) > 0 and ("\n%d known not to convert:\n%s"):format(p.counts.failed, failed.summary(p.counts.reasons)) or ""))
     end
   else
     count_cells(p.counts.found, p.counts.new, p.counts.exist, p.counts.failed, p.counts.reasons)

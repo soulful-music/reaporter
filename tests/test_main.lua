@@ -99,6 +99,16 @@ T["the scan creates no scratch track; a renamed plugin is resolved on Convert"] 
   R.sh("rm -rf '" .. top .. "'")
 end
 
+T["a renamed plugin's known failures are counted apart before Convert, and not ticked when they are all there is"] = function()
+  local top, res, home = setup({ ["Blackhole Immersive"] = { "Wide" } })
+  R.write(home .. "/Music/Eventide/Blackhole Immersive/Broken.tide", "[1, 2]")
+  run(res, home, { BHI })
+  A.truthy(R.read(res .. "/presets/ReaPorter-failed.json"):find("Broken.tide", 1, true))
+  local report = run(res, home, {})
+  A.truthy(row(report, BHI):find("found 2\tnew nil\texist nil\tresolved on Convert\tfailed 1", 1, true), report)
+  R.sh("rm -rf '" .. top .. "'")
+end
+
 T["Convert reads pins only for a plugin that gets new entries"] = function()
   local top, res, home = setup({ Nopins = { "One" } })
   R.write(res .. "/presets/vst3-Nopins.ini", ini.ini_bytes({ { "one", "\1" } }))
