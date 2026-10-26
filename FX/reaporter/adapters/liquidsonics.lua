@@ -20,10 +20,12 @@ function M.partial_state(bytes, plugin)
   })
 end
 
+-- name, preset extension, fx_id, fx_version (header fields JUCE ignores on load), pins:
+-- in and out as REAPER reports them on a stereo track (REAPER 7.82, macOS), which a preset
+-- entry carries.
 local PLUGINS = {
-  -- name, preset extension, fx_id, fx_version (header fields JUCE ignores on load)
-  { "Cinematic Rooms Professional", ".crp_preset", "CRP1", 0x010303 },
-  { "Lustrous Plates Surround", ".lp_preset", "LPS1", 0x010200 },
+  { "Cinematic Rooms Professional", ".crp_preset", "CRP1", 0x010303, { 4, 2 } },
+  { "Lustrous Plates Surround", ".lp_preset", "LPS1", 0x010200, { 2, 2 } },
 }
 
 function M.plugins(env)
@@ -39,6 +41,7 @@ function M.plugins(env)
       exts = { p[2] },
       fx_id = p[3],
       fx_version = p[4],
+      pins = p[5],
     }
   end
   return out

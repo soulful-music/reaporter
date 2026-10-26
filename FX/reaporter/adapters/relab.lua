@@ -106,6 +106,7 @@ function M.plugins(env)
       bundle = "LX480_v4",
       roots = { env.dirs.common .. "/Relab Development/LX480/Presets" },
       exts = { ".lx480" },
+      pins = { 2, 2 }, -- in, out on a stereo track (REAPER 7.82, macOS)
     },
   }
 end

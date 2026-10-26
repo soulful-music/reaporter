@@ -5,6 +5,14 @@ local text = require("reaporter.core.text")
 
 local M = { vendor = "Soundtoys", key = "soundtoys" }
 
+-- Pin counts (in, out) per plugin name as REAPER reports them on a stereo track (REAPER
+-- 7.82, macOS); a plugin missing here is measured once in REAPER before its first conversion.
+local PINS = {
+  EchoBoy = { 2, 2 }, ["EchoBoy Jr"] = { 2, 2 }, Decapitator = { 2, 2 }, ["Little Plate"] = { 2, 2 },
+  SuperPlate = { 2, 2 }, Crystallizer = { 2, 2 }, MicroShift = { 2, 2 }, PrimalTap = { 2, 2 },
+  Radiator = { 2, 2 },
+}
+
 local function key(name)
   return (name:lower():gsub("[^%w]", ""))
 end
@@ -42,6 +50,7 @@ function M.plugins(env)
         roots = { root .. "/" .. f },
         exts = { ".toy" },
         fx_id = rec.fx_id,
+        pins = PINS[rec.fx_name:match("^VST3i?: (.*) %(Soundtoys%)$")],
       }
     end
   end

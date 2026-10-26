@@ -8,6 +8,21 @@ local text = require("reaporter.core.text")
 
 local M = { vendor = "Eventide", key = "eventide" }
 
+-- Pin counts (in, out) as REAPER reports them on a stereo track, measured in REAPER 7.82 on
+-- macOS: a preset entry carries pin masks REAPER applies on load. A plugin missing here is
+-- measured once in REAPER before its first conversion.
+local PINS = {
+  Blackhole = { 2, 2 }, ["Blackhole Immersive"] = { 2, 2 }, CrushStation = { 2, 2 }, Crystals = { 2, 2 },
+  EChannel = { 4, 2 }, EQ45 = { 2, 2 }, EQ65 = { 2, 2 }, ["H3000 Band Delays"] = { 2, 2 },
+  ["H3000 Band Delays Mk II"] = { 2, 2 }, ["H3000 Factory"] = { 4, 2 }, ["H3000 Factory Mk II"] = { 4, 2 },
+  ["H910 Harmonizer"] = { 2, 2 }, ["H949 Harmonizer"] = { 2, 2 }, ["Instant Flanger Mk II"] = { 4, 2 },
+  ["Instant Phaser Mk II"] = { 4, 2 }, MangledVerb = { 2, 2 }, MicroPitch = { 2, 2 }, Octavox = { 2, 2 },
+  Omnipressor = { 4, 2 }, ["Physion Mk II"] = { 4, 2 }, ["Precision Time Align"] = { 2, 2 },
+  Quadravox = { 2, 2 }, ["Rotary Mod"] = { 2, 2 }, ["SP2016 Reverb"] = { 2, 2 }, ShimmerVerb = { 2, 2 },
+  SplitEQ = { 2, 2 }, Spring = { 2, 2 }, ["Temperance Lite"] = { 2, 2 }, TriceraChorus = { 2, 2 },
+  Tverb = { 2, 2 }, UltraChannel = { 4, 2 }, UltraReverb = { 4, 2 }, UltraTap = { 2, 2 }, Undulator = { 2, 2 },
+}
+
 -- The plugin writes its .tide state as the JSON text, then at least 8 NULs, at least
 -- 1008 bytes in all; fewer than 8 trailing NULs is ignored silently by the plugin.
 local TIDE_TRAILER, TIDE_MIN_STATE = 8, 1008
@@ -90,6 +105,7 @@ function M.plugins(env)
       roots = { root .. "/" .. f },
       exts = { ".tide", ".tidex" },
       skip = in_snapshots,
+      pins = PINS[f],
     }
   end
   return out

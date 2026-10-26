@@ -16,6 +16,7 @@ function M.plugins(env)
       exts = { ".taichi_preset" },
       fx_id = "TCR1",
       fx_version = 0x010000,
+      pins = { 4, 2 }, -- in, out on a stereo track (REAPER 7.82, macOS)
     },
   }
 end

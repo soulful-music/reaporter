@@ -112,7 +112,9 @@ end
 return M
 ```
 
-Optional: `plugin.skip(path)` to leave files out, `M.tags(bytes)` for the vendor's own
+Optional: `plugin.pins = { inputs, outputs }`, the plugin's pin counts as REAPER reports
+them on a stereo track (a preset carries them; without them ReaPorter asks REAPER once,
+on Convert), `plugin.skip(path)` to leave files out, `M.tags(bytes)` for the vendor's own
 category fields. Shared codecs live in `codec/` (JUCE ValueTree and VST3 containers, XML,
 JSON). An adapter makes no `reaper.*` calls. Add a synthetic fixture to `tests/` (never a
 real vendor file) and a section to FORMATS.md.

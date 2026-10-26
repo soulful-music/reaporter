@@ -1,7 +1,6 @@
 -- Scan, dry run and conversion of vendor presets into REAPER preset files: everything
 -- between the adapters and the REAPER glue. Pure Lua 5.4; file access is injected.
 local ini = require("reaporter.core.ini")
-local pins = require("reaporter.core.pins")
 local plugin_list = require("reaporter.core.plugin_list")
 local scan = require("reaporter.core.scan")
 local sidecar = require("reaporter.core.sidecar")
@@ -43,7 +42,8 @@ end
 
 -- Every adapter's plugins, matched against REAPER's VST3 list. Returns
 -- {{adapter, plugins = {plugin...}}, ...}; each plugin gains `listing` (REAPER's uid,
--- fx_id, name), `ini_name` and `problem` (why it cannot convert, or nil).
+-- fx_id, name), `ini_name` and `problem` (why it cannot convert, or nil). `pins` is the
+-- adapter's own.
 -- env = {os, dirs, fs, vst3}
 function M.discover(adapters, env)
   local out = {}
@@ -59,7 +59,6 @@ function M.discover(adapters, env)
       elseif plugin.listing.fx_name ~= plugin.fx_name then
         plugin.problem = "REAPER lists it as " .. plugin.listing.fx_name
       end
-      plugin.pins = pins[plugin.fx_name]
       group.plugins[#group.plugins + 1] = plugin
     end
     out[#out + 1] = group

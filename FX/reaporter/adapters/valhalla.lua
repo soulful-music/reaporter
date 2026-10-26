@@ -14,6 +14,13 @@ local FX_IDS = {
   ValhallaSpaceModulator = "SpMd", ValhallaFreqEcho = "FqEh",
 }
 
+-- Pin counts (in, out) as REAPER reports them on a stereo track (REAPER 7.82, macOS); a
+-- plugin missing here is measured once in REAPER before its first conversion.
+local PINS = {
+  ValhallaDelay = { 2, 2 }, ValhallaFutureVerb = { 2, 2 }, ValhallaPlate = { 2, 2 },
+  ValhallaSpaceModulator = { 2, 2 }, ValhallaSupermassive = { 2, 2 }, ValhallaVintageVerb = { 2, 2 },
+}
+
 -- An attribute value quoted as XML writers do: & < > escaped, tab / CR / LF as
 -- character references, single quotes when the value holds a double quote only.
 function M.quote_attr(v)
@@ -49,6 +56,7 @@ function M.plugins(env)
         roots = { presets },
         exts = { ".vpreset" },
         fx_id = FX_IDS[n] or "\0\0\0\0",
+        pins = PINS[n],
       }
     end
   end

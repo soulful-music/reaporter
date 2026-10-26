@@ -30,7 +30,6 @@
 --   [nomain] reaporter/codec/xml.lua
 --   [nomain] reaporter/core/convert.lua
 --   [nomain] reaporter/core/ini.lua
---   [nomain] reaporter/core/pins.lua
 --   [nomain] reaporter/core/plan.lua
 --   [nomain] reaporter/core/plugin_list.lua
 --   [nomain] reaporter/core/scan.lua

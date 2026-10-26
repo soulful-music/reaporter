@@ -42,8 +42,21 @@ T["registry: every adapter honours the contract"] = function()
     keys[a.key] = true
     for _, p in ipairs(a.plugins(env)) do
       A.truthy(p.fx_name:find("^VST3: ") and p.bundle and #p.roots > 0 and #p.exts > 0, p.fx_name)
+      A.truthy(p.pins == nil or (#p.pins == 2 and math.type(p.pins[1]) == "integer"
+        and math.type(p.pins[2]) == "integer"), "pins of " .. p.fx_name)
     end
   end
+end
+
+T["core code names no vendor: vendor data lives in the adapters"] = function()
+  local here = arg[0]:match("^(.*)/[^/]*$") or "."
+  local p = io.popen("cat '" .. here .. "/../FX/reaporter/core/'*.lua")
+  local core = p:read("a"):gsub("%-%-[^\n]*", "")
+  p:close()
+  for _, a in ipairs(registry) do
+    A.truthy(not core:find(a.vendor, 1, true), a.vendor .. " named in core/")
+  end
+  A.truthy(not core:find("Valhalla", 1, true) and not core:find("Relab", 1, true))
 end
 
 T["liquidsonics: the file bytes are the plugin state"] = function()
