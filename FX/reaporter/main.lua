@@ -502,8 +502,8 @@ local function draw_results()
     end
   end
   ImGui.Spacing(ctx)
-  ImGui.TextWrapped(ctx, "REAPER lists the new presets in each plugin's preset menu. "
-    .. "An FX window that was open during the conversion shows them after it is closed and reopened.")
+  ImGui.TextWrapped(ctx, "The new presets are in each plugin's REAPER preset list now, "
+    .. "also for plugins that are open: no need to reopen an FX or restart REAPER.")
   ImGui.EndChild(ctx)
 end
 
