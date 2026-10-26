@@ -33,11 +33,15 @@ local SIDECARS = RESOURCE .. "/MixSurface/fx-presets"
 
 local fs = {}
 
-function fs.list(dir, rescan)
-  if rescan then
-    reaper.EnumerateFiles(dir, -1)
-    reaper.EnumerateSubdirectories(dir, -1)
-  end
+-- REAPER caches folder listings; index -1 drops the cache (measured: without it a file
+-- added after the first listing stays invisible).
+local function fresh(dir)
+  reaper.EnumerateFiles(dir, -1)
+  reaper.EnumerateSubdirectories(dir, -1)
+end
+
+function fs.list(dir)
+  fresh(dir)
   local dirs, files = {}, {}
   local i = 0
   while true do
@@ -57,6 +61,7 @@ function fs.list(dir, rescan)
 end
 
 function fs.is_dir(path)
+  fresh(path)
   return reaper.EnumerateFiles(path, 0) ~= nil or reaper.EnumerateSubdirectories(path, 0) ~= nil
 end
 
@@ -451,14 +456,7 @@ local function draw()
   end
   ImGui.SameLine(ctx, avail_w - 70)
   ImGui.BeginDisabled(ctx, S.phase == "converting" or S.phase == "scan")
-  if ImGui.Button(ctx, "Rescan", 70) then
-    for _, g in ipairs(S.groups) do
-      for _, p in ipairs(g.plugins) do
-        for _, r in ipairs(p.roots) do fs.list(r, true) end
-      end
-    end
-    start_scan()
-  end
+  if ImGui.Button(ctx, "Rescan", 70) then start_scan() end
   ImGui.EndDisabled(ctx)
 
   if S.phase == "done" then
