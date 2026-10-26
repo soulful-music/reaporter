@@ -104,7 +104,8 @@ local function read(body)
       local close = body:byte(c) == 91 and body:find("]", c, true)
       if close and close <= stop then
         local name = text.strip_ascii(body:sub(c + 1, close - 1)):lower()
-        local num = name:match("^preset(%d+)$")
+        -- REAPER looks entries up by the string "PresetN", so "[Preset01]" is not entry 1.
+        local num = name:match("^preset(0)$") or name:match("^preset([1-9]%d*)$")
         if name == "general" then
           if seen_general then r.dups[#r.dups + 1] = "[General]" end
           section = not seen_general and "general" or nil
@@ -200,10 +201,11 @@ end
 
 -- The file REAPER uses for a VST3's user presets: "VST3: Tai Chi (Reverb Foundry)" ->
 -- "vst3-Tai Chi.ini". REAPER's channel-count suffix goes first: "VST3: Blackhole
--- Immersive (Eventide) (16ch)" -> "vst3-Blackhole Immersive.ini" (measured).
+-- Immersive (Eventide) (16ch)" -> "vst3-Blackhole Immersive.ini" (measured). The plugin
+-- list's other suffixes, "(4->32ch)" and "(32 out)", go the same way.
 function M.preset_file_name(fx_name)
   local name = fx_name:gsub("^VST3i?: ", "")
-  name = name:gsub(" %(%d+ch%)$", "")
+  name = name:gsub(" %(%d+ch%)$", ""):gsub(" %(%d+%->%d+ch%)$", ""):gsub(" %(%d+ out%)$", "")
   name = name:gsub(" %([^()]*%)$", "")
   return "vst3-" .. name .. ".ini"
 end
@@ -259,9 +261,18 @@ end
 -- (bytes, added names, skipped names); raises for a file it must not touch (inspect).
 function M.merge(existing, entries)
   if not existing or existing == "" then
-    local added = {}
-    for _, e in ipairs(entries) do added[#added + 1] = e[1] end
-    return M.ini_bytes(entries), added, {}
+    local taken, add, added, skipped = {}, {}, {}, {}
+    for _, e in ipairs(entries) do
+      local key = M.name_key(e[1])
+      if taken[key] then
+        skipped[#skipped + 1] = e[1]
+      else
+        taken[key] = true
+        add[#add + 1] = e
+        added[#added + 1] = e[1]
+      end
+    end
+    return M.ini_bytes(add), added, skipped
   end
   local f = M.inspect(existing)
   local eol = (f.body:find("\r\n", 1, true) or not f.body:find("\n", 1, true)) and "\r\n" or "\n"

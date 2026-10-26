@@ -27,6 +27,23 @@ T["file names follow REAPER's rule"] = function()
   A.eq(ini.preset_file_name("VST3: Tai Chi (Reverb Foundry)"), "vst3-Tai Chi.ini")
   A.eq(ini.preset_file_name("VST3i: Kit (Vendor)"), "vst3-Kit.ini")
   A.eq(ini.preset_file_name("VST3: Blackhole Immersive (Eventide) (16ch)"), "vst3-Blackhole Immersive.ini")
+  A.eq(ini.preset_file_name("VST3: Kit (Vendor) (4->32ch)"), "vst3-Kit.ini")
+  A.eq(ini.preset_file_name("VST3: Kit (Vendor) (32 out)"), "vst3-Kit.ini")
+  A.eq(ini.preset_file_name("VST3: Foo (2ch) (Vendor)"), "vst3-Foo (2ch).ini")
+end
+
+T["a new file keeps one entry per name, trimmed and ignoring case"] = function()
+  local bytes, added, skipped = ini.merge(nil, { { "Blunt", "\1" }, { "blunt ", "\2" }, { "Other", "\3" } })
+  A.eq(added, { "Blunt", "Other" })
+  A.eq(skipped, { "blunt " })
+  A.eq(ini.listed_names(bytes), { "Blunt", "Other" })
+end
+
+T["a zero-padded section is not entry N"] = function()
+  local file = "[General]\nNbPresets=1\n\n[Preset00]\nName=Ghost\n\n[Preset0]\nData=00\nLen=1\nName=Real\n"
+  local _, added, skipped = ini.merge(file, { { "Ghost", "\1" }, { "Real", "\2" } })
+  A.eq(added, { "Ghost" })
+  A.eq(skipped, { "Real" })
 end
 
 T["listed names: as REAPER's index reads them"] = function()
