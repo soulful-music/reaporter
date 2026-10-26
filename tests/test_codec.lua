@@ -221,6 +221,21 @@ T["json: objects keep their key order; set and remove as a Python dict"] = funct
   A.eq(json.keys(o), { "b", "c", "a" })
 end
 
+T["json: integers past 64 bits are written back as they were"] = function()
+  local text = '[9223372036854775807, 9223372036854775808, -9223372036854775809, 123456789012345678901234567890, 1.5e30]'
+  local v = json.decode(text)
+  A.eq(math.type(v[1]), "integer")
+  A.truthy(json.is_bigint(v[2]) and json.is_bigint(v[4]))
+  A.eq(tostring(v[3]), "-9223372036854775809")
+  A.eq(json.encode_python(v, ""):gsub("%s+", ""), "[9223372036854775807,9223372036854775808,-9223372036854775809,123456789012345678901234567890,1.5e+30]")
+  A.truthy(json.encode(v):find("123456789012345678901234567890,", 1, true))
+end
+
+T["json: a lone surrogate escape from a file is written back as an escape"] = function()
+  local v = json.decode('{"s": "a\\ud800b\\udc00", "t": "\\ud83d\\ude00"}')
+  A.eq(json.encode_python(v, ""), '{\n"s": "a\\ud800b\\udc00",\n"t": "\\ud83d\\ude00"\n}')
+end
+
 T["json: encode_python writes json.dumps(indent=...)"] = function()
   local o = json.decode('{"z": [], "y": {}, "s": "\\u00e9\\u007f\\u0001\\"\\\\/\\n\\ud83d\\ude00", '
     .. '"n": [1, 2.5, 1e-07, 1e16, -0.0, 0.1, null, true], "o": {"k": [{}]}}')

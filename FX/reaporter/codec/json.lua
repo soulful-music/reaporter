@@ -2,7 +2,8 @@
 --
 -- Objects decode to tables marked with json.OBJECT (so an empty object stays an object);
 -- arrays to plain sequences. Integers stay Lua integers, numbers with a fraction or an
--- exponent become floats. NaN / Infinity / -Infinity are accepted. The writer emits
+-- exponent become floats; an integer outside 64 bits becomes a json.bigint (its digits,
+-- written back as they were, as Python's arbitrary-size int is). NaN / Infinity / -Infinity are accepted. The writer emits
 -- sorted keys, one-space indent, raw UTF-8 and the shortest float repr that round-trips,
 -- the layout the MixSurface sidecar uses (SIDECAR.md). Objects also remember their key
 -- order (json.keys, json.set, json.remove) for encode_python, which writes what Python's
@@ -62,6 +63,11 @@ function M.remove(obj, k)
   end
   return v
 end
+
+-- A whole number too large for a Lua integer, kept as its decimal text.
+local BIG_MT = { __name = "json.bigint", __tostring = function(b) return b.digits end }
+
+function M.is_bigint(v) return type(v) == "table" and getmetatable(v) == BIG_MT end
 
 function M.is_object(t)
   return type(t) == "table" and getmetatable(t) == OBJ_MT
@@ -138,7 +144,8 @@ local function parse_number(s, i)
     v = tonumber(text)
     if math.type(v) ~= "float" then v = v + 0.0 end -- not `+ 0.0` always: it turns -0.0 into 0.0
   else
-    v = math.tointeger(tonumber(text)) or tonumber(text)
+    v = tonumber(text)
+    if math.type(v) ~= "integer" then v = setmetatable({ digits = text }, BIG_MT) end
   end
   return v, j
 end
@@ -258,6 +265,8 @@ local function encode(v, depth, out)
     out[#out + 1] = math.type(v) == "integer" and ("%d"):format(v) or M.float_repr(v)
   elseif t == "string" then
     out[#out + 1] = escape_string(v)
+  elseif M.is_bigint(v) then
+    out[#out + 1] = v.digits
   elseif t == "table" then
     local pad = "\n" .. (" "):rep(depth + 1)
     if M.is_object(v) then
@@ -309,7 +318,7 @@ local function py_string(s)
     if c == "\b" then return "\\b" end
     if c == "\f" then return "\\f" end
     local out = {}
-    for _, cp in utf8.codes(c) do
+    for _, cp in utf8.codes(c, true) do -- lax: a lone surrogate from a "\\ud800" escape
       if cp >= 0x10000 then
         cp = cp - 0x10000
         out[#out + 1] = ("\\u%04x\\u%04x"):format(0xD800 | (cp >> 10), 0xDC00 | (cp & 0x3FF))
@@ -331,6 +340,8 @@ local function encode_py(v, indent, depth, out)
     out[#out + 1] = math.type(v) == "integer" and ("%d"):format(v) or M.float_repr(v)
   elseif t == "string" then
     out[#out + 1] = py_string(v)
+  elseif M.is_bigint(v) then
+    out[#out + 1] = v.digits
   elseif t == "table" then
     local pad = "\n" .. indent:rep(depth + 1)
     local obj = M.is_object(v)
