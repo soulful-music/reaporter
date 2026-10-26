@@ -465,10 +465,8 @@ local function draw_list()
       if matches(g, p) then shown[#shown + 1] = p end
       if available(p) then
         avail = avail + 1
-        if S.ticked[p.fx_name] then
-          ticked = ticked + 1
-          found, new, exist = found + p.counts.found, new + adds(p), exist + (p.counts.exist or 0)
-        end
+        if S.ticked[p.fx_name] then ticked = ticked + 1 end
+        found, new, exist = found + p.counts.found, new + adds(p), exist + (p.counts.exist or 0)
       end
     end
     if not searching or #shown > 0 then
@@ -498,7 +496,7 @@ local function draw_list()
       elseif #g.plugins == 0 then
         ImGui.TableNextColumn(ctx)
         ImGui.TextDisabled(ctx, "no presets found")
-      elseif ticked > 0 then
+      elseif avail > 0 then
         count_cells(found, new, exist)
       end
       if open then
