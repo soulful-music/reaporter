@@ -102,23 +102,29 @@ local function read_plugin_list()
 end
 
 -- Instantiate an FX on a scratch track at the end of the project and read its pin counts
--- and REAPER's preset file name; the track is deleted again.
+-- and REAPER's preset file name; the track is deleted again, also when a call fails.
+-- Convert only: the scan creates nothing. Returns {nin, nout, ini_name} or nil.
 local function probe_fx(fx_name)
   reaper.PreventUIRefresh(1)
   reaper.Undo_BeginBlock()
-  local idx = reaper.CountTracks(0)
-  reaper.InsertTrackAtIndex(idx, false)
-  local tr = reaper.GetTrack(0, idx)
-  local out
-  local fx = reaper.TrackFX_AddByName(tr, fx_name, false, -1)
-  if fx >= 0 then
+  local tr
+  local ok, out = pcall(function()
+    local idx = reaper.CountTracks(0)
+    reaper.InsertTrackAtIndex(idx, false)
+    tr = reaper.GetTrack(0, idx)
+    local fx = reaper.TrackFX_AddByName(tr, fx_name, false, -1)
+    if fx < 0 then return nil end
     local _, nin, nout = reaper.TrackFX_GetIOSize(tr, fx)
     local file = reaper.TrackFX_GetUserPresetFilename(tr, fx, "")
-    out = { nin = nin, nout = nout, ini_name = file and file:match("([^/\\]+)$") }
-  end
-  reaper.DeleteTrack(tr)
+    return { nin = nin, nout = nout, ini_name = file and file:match("([^/\\]+)$") }
+  end)
+  local cleaned, cerr = pcall(function()
+    if tr then reaper.DeleteTrack(tr) end
+  end)
   reaper.Undo_EndBlock("ReaPorter: read plugin pins", -1)
   reaper.PreventUIRefresh(-1)
+  if not ok then error("reading the plugin in REAPER failed: " .. tostring(out), 0) end
+  if not cleaned then error("removing the scratch track failed: " .. tostring(cerr), 0) end
   return out
 end
 
@@ -172,6 +178,10 @@ local function available(p)
   return not p.problem and p.counts and not p.counts.error and p.counts.found > 0
 end
 
+-- The presets a ticked plugin adds: the dry run's new, or every one found while its preset
+-- file is resolved on Convert.
+local function adds(p) return p.counts.new or p.counts.found end
+
 local function start_scan()
   local env = {
     os = reaper.GetOS(),
@@ -194,21 +204,22 @@ local function start_scan()
   S.phase = "scan"
 end
 
--- Scan one plugin: its presets on disk and the dry run against REAPER's file.
+-- Scan one plugin: its presets on disk and the dry run against REAPER's file. A plugin
+-- REAPER names differently from the vendor folder has its preset file read from REAPER
+-- itself, on Convert (probe_fx); until then it shows only what was found.
 local function scan_one(p)
   if p.problem and p.listing and p.problem:find("^REAPER lists it as") then
-    -- REAPER names this plugin differently from the vendor folder: ask REAPER itself.
-    local probed = probe_fx(p.listing.fx_name)
-    if probed and probed.ini_name then
-      p.ini_name, p.problem = probed.ini_name, nil
-      p.pins = p.pins or { probed.nin, probed.nout }
-    end
+    p.problem, p.unresolved = nil, true
   end
   p.named = convert.presets(p, fs)
-  p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named)
+  if p.unresolved then
+    p.counts = { found = #p.named }
+  else
+    p.counts = plan.dry_run(fs, PRESETS .. "/" .. p.ini_name, p.named)
+  end
   if not S.known[p.fx_name] then
     S.known[p.fx_name] = true
-    if available(p) and p.counts.new > 0 then S.ticked[p.fx_name] = true end
+    if available(p) and adds(p) > 0 then S.ticked[p.fx_name] = true end
   end
 end
 
@@ -217,7 +228,7 @@ local function to_convert()
   for _, p in ipairs(S.rows) do
     if available(p) and S.ticked[p.fx_name] then
       list[#list + 1] = p
-      total = total + p.counts.new
+      total = total + adds(p)
     end
   end
   return list, total
@@ -228,7 +239,7 @@ local function start_convert()
   S.queue, S.results, S.current = list, {}, nil
   S.stamp = os.date("%Y%m%d-%H%M%S")
   S.total, S.done_count = 0, 0
-  for _, p in ipairs(list) do S.total = S.total + p.counts.new end
+  for _, p in ipairs(list) do S.total = S.total + adds(p) end
   save_set("ticked", S.ticked)
   save_set("known", S.known)
   save_open()
@@ -280,7 +291,18 @@ local function convert_tick()
         S.phase = "done"
         return
       end
-      local ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named)
+      local ok, fresh_named = true, nil
+      if p.unresolved then
+        local pok, probed = pcall(probe_fx, p.listing.fx_name)
+        if not pok or not probed or not probed.ini_name then
+          ok, fresh_named = false, pok and "REAPER could not load the plugin to read its preset file" or probed
+        else
+          p.ini_name, p.unresolved = probed.ini_name, nil
+          p.pins = p.pins or { probed.nin, probed.nout }
+        end
+      end
+      if ok then ok, fresh_named = pcall(plan.fresh, fs, PRESETS .. "/" .. p.ini_name, p.named) end
+      if ok then S.total = S.total - adds(p) + #fresh_named end
       if not ok then
         S.results[#S.results + 1] = { plugin = p, written = 0, skipped = 0, failed = {}, error = tostring(fresh_named) }
       else
@@ -362,6 +384,15 @@ local function draw_plugin(p)
     ImGui.TableNextColumn(ctx)
     ImGui.TextColored(ctx, RED, "can't merge")
     if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, p.counts.error) end
+  elseif not p.counts.new then
+    ImGui.TableNextColumn(ctx)
+    ImGui.Text(ctx, tostring(p.counts.found))
+    ImGui.TableNextColumn(ctx)
+    ImGui.TextDisabled(ctx, "resolved on Convert")
+    if ImGui.IsItemHovered(ctx) then
+      ImGui.SetTooltip(ctx, "REAPER names this plugin " .. p.listing.fx_name
+        .. ": Convert asks REAPER for its preset file, then counts what is new.")
+    end
   else
     count_cells(p.counts.found, p.counts.new, p.counts.exist)
   end
@@ -389,7 +420,7 @@ local function draw_list()
         avail = avail + 1
         if S.ticked[p.fx_name] then
           ticked = ticked + 1
-          found, new, exist = found + p.counts.found, new + p.counts.new, exist + p.counts.exist
+          found, new, exist = found + p.counts.found, new + adds(p), exist + (p.counts.exist or 0)
         end
       end
     end
@@ -560,7 +591,8 @@ local function qa_step()
     for _, p in ipairs(S.rows) do
       local c = p.counts or {}
       f:write(("ROW\t%s\t%s\tfound %s\tnew %s\texist %s\t%s\n"):format(p.fx_name, p.ini_name,
-        tostring(c.found), tostring(c.new), tostring(c.exist), p.problem or c.error or ""))
+        tostring(c.found), tostring(c.new), tostring(c.exist),
+        p.problem or c.error or (p.unresolved and "resolved on Convert") or ""))
     end
     for _, r in ipairs(S.results) do
       local sc = r.sidecar

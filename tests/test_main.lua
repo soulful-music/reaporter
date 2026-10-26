@@ -10,8 +10,15 @@ local LIST = "[vstcache]\n"
   .. "Blackhole.vst3=80741FD50C9CDA01,1332365903{565354484F4C45626C61636B686F6C65,Blackhole (Eventide)\n"
   .. "Spring.vst3=0011,77{56535453707267737072696E67000000,Spring (Eventide)\n"
   .. "Blackhole_Immersive.vst3=006E,505373633{5653544248496D626C61636B686F6C65,Blackhole Immersive (Eventide) (16ch)\n"
+  .. "Nopins.vst3=0012,88{56535450696E7370696E730000000000,Nopins (Eventide)\n"
 
 local BH = "VST3: Blackhole (Eventide)"
+local BHI = "VST3: Blackhole Immersive (Eventide)"
+local NOPINS = "VST3: Nopins (Eventide)"
+local FX = {
+  ["VST3: Blackhole Immersive (Eventide) (16ch)"] = { 2, 2, "vst3-Blackhole Immersive.ini" },
+  [NOPINS] = { 6, 4, "vst3-Nopins.ini" },
+}
 
 local function tide(n) return F.tide({ { "pluginID", '"ABCD"' }, { "pluginVer", '"1.0.' .. n .. '"' } }) end
 
@@ -28,7 +35,7 @@ local function setup(files, mixsurface)
 end
 
 local function run(res, home, plugins, extra)
-  local opts = { resource = res, root = res:match("^(.*)/[^/]*$") }
+  local opts = { resource = res, root = res:match("^(.*)/[^/]*$"), fx = FX }
   for k, v in pairs(extra or {}) do opts[k] = v end
   local stub = R.reaper(opts)
   if extra and extra.ext then for k, v in pairs(extra.ext) do stub.ext[k] = v end end
@@ -64,6 +71,55 @@ T["main.lua refuses a preset file it cannot read and leaves it alone"] = functio
   A.truthy(not report:find("RESULT", 1, true), report)
   A.eq(R.read(path), mine)
   A.eq(R.tree(res .. "/presets"), { "vst3-Blackhole.ini" })
+  R.sh("rm -rf '" .. top .. "'")
+end
+
+local function row(report, fx_name)
+  return report:match("ROW\t" .. fx_name:gsub("%p", "%%%0") .. "\t([^\n]*)")
+end
+
+local function result(report, fx_name)
+  return report:match("RESULT\t" .. fx_name:gsub("%p", "%%%0") .. "\t([^\n]*)")
+end
+
+local function settled(stub)
+  A.eq({ stub.tracks(), stub.state.refresh, stub.state.undo }, { 0, 0, 0 }, "tracks, refresh, undo depth")
+end
+
+T["the scan creates no scratch track; a renamed plugin is resolved on Convert"] = function()
+  local top, res, home = setup({ ["Blackhole Immersive"] = { "Wide", "Tall" } })
+  local report, stub = run(res, home, {})
+  A.eq(stub.calls.InsertTrackAtIndex, nil)
+  A.truthy(row(report, BHI):find("found 2\tnew nil\texist nil\tresolved on Convert", 1, true), report)
+  report, stub = run(res, home, { BHI })
+  A.eq(stub.calls.InsertTrackAtIndex, 1)
+  settled(stub)
+  A.truthy(result(report, BHI):find("^written 2\t"), report)
+  A.eq(ini.listed_names(R.read(res .. "/presets/vst3-Blackhole Immersive.ini")), { "Tall", "Wide" })
+  R.sh("rm -rf '" .. top .. "'")
+end
+
+T["Convert reads pins only for a plugin that gets new entries"] = function()
+  local top, res, home = setup({ Nopins = { "One" } })
+  R.write(res .. "/presets/vst3-Nopins.ini", ini.ini_bytes({ { "one", "\1" } }))
+  local report, stub = run(res, home, { NOPINS })
+  A.eq(stub.calls.InsertTrackAtIndex, nil, "nothing new: no scratch track")
+  A.truthy(result(report, NOPINS):find("^written 0\tskipped 1\t"), report)
+  R.write(home .. "/Music/Eventide/Nopins/Two.tide", tide(2))
+  report, stub = run(res, home, { NOPINS })
+  A.eq(stub.calls.InsertTrackAtIndex, 1)
+  settled(stub)
+  A.truthy(result(report, NOPINS):find("^written 1\tskipped 1\tfailed 0\tpins 6/4\t"), report)
+  R.sh("rm -rf '" .. top .. "'")
+end
+
+T["a failing probe still removes its track and restores refresh and undo"] = function()
+  local top, res, home = setup({ ["Blackhole Immersive"] = { "Wide" } })
+  local report, stub = run(res, home, { BHI }, { probe_error = "plugin crashed" })
+  settled(stub)
+  A.eq(stub.calls.DeleteTrack, 1)
+  A.truthy(result(report, BHI):find("error [^\t]*plugin crashed"), report)
+  A.eq(R.tree(res), { "qa.txt", "reaper-vstplugins_arm64.ini" })
   R.sh("rm -rf '" .. top .. "'")
 end
 
