@@ -28,7 +28,9 @@ ReaPorter scans for each vendor's preset folders and matches every plugin to REA
 list. For each plugin it shows how many presets it found, how many are new and how many
 REAPER already has under the same name. That is a dry run: nothing is written yet.
 
-Untick what you don't want and press **Convert**. It converts in the background, a few presets
+Vendors fold open to show their plugins, and the search box filters by plugin or vendor
+name; Convert still acts on everything ticked, and says how many ticked plugins the search
+hides. Untick what you don't want and press **Convert**. It converts in the background, a few presets
 per frame, so REAPER stays responsive, then lists what it wrote, what it skipped and what
 failed, with the reason.
 
