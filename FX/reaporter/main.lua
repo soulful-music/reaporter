@@ -543,8 +543,8 @@ local function draw_results()
     ImGui.Unindent(ctx, 18)
   end
   ImGui.Spacing(ctx)
-  ImGui.TextWrapped(ctx, "The new presets are in each plugin's REAPER preset list now, "
-    .. "also for plugins that are open: no need to reopen an FX or restart REAPER.")
+  ImGui.TextWrapped(ctx, "The new presets can be loaded now by name, by index or with next preset, "
+    .. "also in a plugin that is open.")
   ImGui.EndChild(ctx)
 end
 

@@ -50,10 +50,10 @@ What it guarantees:
 Preset names are the file names. When two files share a name, the folder is added:
 `Big Hall (Vocals)`.
 
-New presets show up straight away, also in a plugin that is open: no need to reopen the FX or
-restart REAPER. (Measured with an FX window open while its preset file was rewritten three
-times: REAPER's preset list for that FX grew each time, and loading by name, by index and
-with next / previous preset all reached the new entries.)
+A plugin that is already open can load the new presets without being reopened: by name, by
+index and with next preset. (Measured with an FX open while its preset file was rewritten
+three times.) Whether the FX window's preset menu lists them before the plugin is reopened
+has not been checked.
 
 ### MixSurface folders and tags
 
