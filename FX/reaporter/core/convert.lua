@@ -114,7 +114,8 @@ end
 
 -- Convert presets until `more()` returns false or none are left; returns true when done.
 -- read(path) -> bytes or nil, reason. A preset that fails is recorded with its reason
--- (and the file's {size, adler32} when it was read) and the rest carry on.
+-- (and the file's {size, adler32} when the file itself is why it failed, not REAPER or
+-- plugin-list state: failed.environment) and the rest carry on.
 function M.step(job, read, more)
   while job.next <= #job.named do
     local name, path = job.named[job.next][1], job.named[job.next][2]
@@ -127,8 +128,9 @@ function M.step(job, read, more)
       if ok and type(chunk) == "string" then
         job.ok[#job.ok + 1] = { name, path, chunk }
       else
+        local content = not ok and not failed.is_environment(chunk)
         job.failed[#job.failed + 1] = { path, ok and "adapter returned no state" or tostring(chunk),
-          { failed.fingerprint(bytes) } }
+          content and { failed.fingerprint(bytes) } or nil }
       end
     end
     if more and not more() then break end

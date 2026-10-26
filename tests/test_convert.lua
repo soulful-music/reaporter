@@ -139,19 +139,21 @@ T["preset folders per OS"] = function()
   A.eq(m.user, "/Users/me/Library/Application Support")
 end
 
+local PLUGIN = { fx_name = "VST3: Synthetic (Vendor)" }
+
 T["known failures: remembered with size and checksum, a changed file is new again"] = function()
   local files = { ["/v/Bad.x"] = "not a preset", ["/v/Good.x"] = "fine" }
   local read = function(p) return files[p] end
   local adapter = { to_state = function(b) if b == "fine" then return "S" end error("synthetic reason", 0) end }
   local named = { { "Bad", "/v/Bad.x" }, { "Good", "/v/Good.x" } }
-  local job = convert.new_job(adapter, {}, named)
+  local job = convert.new_job(adapter, PLUGIN, named)
   convert.step(job, read)
   local store = failed.decode(nil)
   A.eq(failed.record(store, job), true)
   A.eq(failed.record(store, job), false, "recording the same failures again changes nothing")
   local again = failed.decode(failed.encode(store))
-  A.eq(again.files["/v/Bad.x"], { size = 12, adler32 = select(2, failed.fingerprint("not a preset")), reason = "synthetic reason" })
-  local known = failed.checker(again, read)
+  A.eq(again.files[PLUGIN.fx_name]["/v/Bad.x"], { size = 12, adler32 = select(2, failed.fingerprint("not a preset")), reason = "synthetic reason" })
+  local known = failed.checker(again, read, PLUGIN.fx_name)
   A.eq(convert.dry_run(named, nil, known), { found = 2, new = 1, exist = 0, failed = 1, reasons = { ["synthetic reason"] = 1 } })
   local fs = { read = read, exists = function(p) return files[p] ~= nil end }
   local fresh, nknown = plan.fresh(fs, "/none.ini", named, known)
@@ -159,20 +161,77 @@ T["known failures: remembered with size and checksum, a changed file is new agai
   files["/v/Bad.x"] = "not a preset!"
   A.eq(convert.dry_run(named, nil, known).new, 2, "a changed file counts as new")
   files["/v/Bad.x"] = "fine"
-  local fixed = convert.new_job(adapter, {}, named)
+  local fixed = convert.new_job(adapter, PLUGIN, named)
   convert.step(fixed, read)
   A.eq(failed.record(again, fixed), true)
-  A.eq(again.files["/v/Bad.x"], nil, "a file that converts is forgotten")
+  A.eq(again.files[PLUGIN.fx_name]["/v/Bad.x"], nil, "a file that converts is forgotten")
 end
 
 T["known failures: a name REAPER has counts as existing; other versions' stores are ignored"] = function()
-  local store = { files = { ["/v/A.x"] = { size = 1, adler32 = select(2, failed.fingerprint("a")), reason = "r" } } }
-  local known = failed.checker(store, function() return "a" end)
+  local store = { files = { P = { ["/v/A.x"] = { size = 1, adler32 = select(2, failed.fingerprint("a")), reason = "r" } } } }
+  local known = failed.checker(store, function() return "a" end, "P")
   local existing = require("reaporter.core.ini").ini_bytes({ { "A", "\1" } })
   A.eq(convert.dry_run({ { "A", "/v/A.x" } }, existing, known), { found = 1, new = 0, exist = 1 })
-  A.eq(failed.decode('{"reaporter": "0.0.1", "failed": {"/v/A.x": {"size": 1, "adler32": 98, "reason": "r"}}}').files, {})
+  A.eq(failed.decode('{"reaporter": "0.0.1", "failed": {"P": {"/v/A.x": {"size": 1, "adler32": 98, "reason": "r"}}}}').files, {})
   A.eq(failed.decode("not json").files, {})
   A.eq(failed.summary({ x = 1, y = 3 }), "3 x y\n1 x x")
+end
+
+T["known failures: a reason with non-UTF-8 bytes does not poison the store"] = function()
+  local store = failed.decode(nil)
+  local sum = select(2, failed.fingerprint("x"))
+  store.files.P = {
+    ["/v/A.x"] = { size = 1, adler32 = sum, reason = "magic \255\0\200" },
+    ["/v/B.x"] = { size = 1, adler32 = sum, reason = "plain" },
+  }
+  store.files.Q = { ["/v/\255.x"] = { size = 1, adler32 = sum, reason = "r" } }
+  local again = failed.decode(failed.encode(store))
+  A.eq(again.files.P["/v/A.x"].reason, "magic \\xff\0\\xc8")
+  A.eq(again.files.P["/v/B.x"].reason, "plain", "the neighbour entry survives")
+  A.truthy(again.files.Q["/v/\\xff.x"], "a path with a bad byte is kept too")
+  A.eq(failed.decode(failed.encode(again)).files, again.files, "an encoded store is stable")
+end
+
+T["known failures: the same file failing under another plugin is not known"] = function()
+  local read = function() return "bytes" end
+  local adapter = { to_state = function() error("synthetic reason", 0) end }
+  local job = convert.new_job(adapter, { fx_name = "A" }, { { "N", "/v/N.x" } })
+  convert.step(job, read)
+  local store = failed.decode(nil)
+  failed.record(store, job)
+  A.eq(failed.checker(store, read, "A")("/v/N.x"), "synthetic reason")
+  A.eq(failed.checker(store, read, "B")("/v/N.x"), nil)
+end
+
+T["known failures: only failures of the file's contents are remembered"] = function()
+  local read = function() return "bytes" end
+  local adapter = { to_state = function(_, path)
+    if path == "/v/env.x" then failed.environment("REAPER lists nothing for this plugin") end
+    if path == "/v/nil.x" then return nil end
+    error("content reason", 0)
+  end }
+  local named = { { "E", "/v/env.x" }, { "C", "/v/content.x" }, { "R", "/v/nil.x" } }
+  local job = convert.new_job(adapter, PLUGIN, named)
+  convert.step(job, read)
+  A.eq(#job.failed, 3)
+  A.eq(job.failed[1][2], "REAPER lists nothing for this plugin", "the environment reason is shown")
+  local store = failed.decode(nil)
+  failed.record(store, job)
+  local known = failed.checker(store, read, PLUGIN.fx_name)
+  A.eq(known("/v/content.x"), "content reason")
+  A.eq(known("/v/env.x"), nil, "an environment failure is tried again")
+  A.eq(known("/v/nil.x"), nil, "an adapter returning nothing is tried again")
+end
+
+T["known failures: the adapters' REAPER-state failures are not remembered"] = function()
+  local read = function() return "bytes" end
+  for _, name in ipairs({ "soundtoys", "dmgaudio" }) do
+    local adapter = require("reaporter.adapters." .. name)
+    local job = convert.new_job(adapter, { fx_name = "P" }, { { "N", "/v/N.x" } })
+    convert.step(job, read)
+    A.eq(#job.failed, 1, name)
+    A.eq(job.failed[1][3], nil, name .. " has no fingerprint")
+  end
 end
 
 return T

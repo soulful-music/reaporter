@@ -1,6 +1,7 @@
 -- Soundtoys 5: a .toy is CR-separated text whose archive the plugin loads as is; the
 -- state is that text, wrapped VST2-style (FORMATS.md, "Soundtoys").
 local juce = require("reaporter.codec.juce")
+local failed = require("reaporter.core.failed")
 local text = require("reaporter.core.text")
 
 local M = { vendor = "Soundtoys", key = "soundtoys" }
@@ -58,7 +59,7 @@ function M.plugins(env)
 end
 
 function M.to_state(bytes, _, plugin)
-  if not plugin.fx_id then error("REAPER lists no VST2 id for this plugin", 0) end
+  if not plugin.fx_id then failed.environment("REAPER lists no VST2 id for this plugin") end
   return juce.build_vst2_wrapped(plugin.fx_id, 1, 1, M.state_text(bytes))
 end
 

@@ -3,6 +3,7 @@
 -- "DMGAudio"; the fresh states are in dmgaudio_fresh.lua).
 local fresh_states = require("reaporter.adapters.dmgaudio_fresh")
 local json = require("reaporter.codec.json")
+local failed = require("reaporter.core.failed")
 local zlib = require("reaporter.codec.zlib")
 
 local M = { vendor = "DMGAudio", key = "dmgaudio" }
@@ -56,7 +57,7 @@ function M.state_doc(bytes, fresh)
   local doc = M.read_json(bytes)
   if not json.is_object(doc) then error("not a JSON object", 0) end
   local state = M.read_json(fresh)
-  if not json.is_object(state) then error("the fresh state is not a JSON object", 0) end
+  if not json.is_object(state) then failed.environment("the fresh state is not a JSON object") end
   if not has(doc, "presets") then
     -- Multiplicity: one preset's parameters and name at the top level. It goes into
     -- presets[1] and the A/B slot the file's settings make current, as the plugin writes
@@ -107,7 +108,7 @@ end
 
 -- plugin.fresh: a fresh instance's plugin state.
 function M.to_state(bytes, _, plugin)
-  if not plugin.fresh then error("no fresh plugin state to start from", 0) end
+  if not plugin.fresh then failed.environment("no fresh plugin state to start from") end
   local text = json.encode_python(M.state_doc(bytes, plugin.fresh), "\t") .. "\0"
   local comp = ZIP .. zlib.store(text)
   return string.pack("<I4<I4", #comp, 1) .. comp .. ("\0"):rep(8)
