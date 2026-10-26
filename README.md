@@ -9,8 +9,9 @@ It reads only what is already on your machine and ships no presets.
 
 ## Install
 
-ReaPorter needs [ReaImGui](https://forum.cockos.com/showthread.php?t=250419) (0.9 or newer),
-which ReaPack installs from its default repository.
+ReaPorter needs [ReaImGui](https://forum.cockos.com/showthread.php?t=250419) (0.10 or newer),
+which ReaPack installs from its default repository. Older builds show no window on recent
+macOS (0.9.2 on macOS 26).
 
 1. In REAPER: **Extensions > ReaPack > Import repositories...**, paste
 

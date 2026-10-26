@@ -23,7 +23,7 @@ local QA = rawget(_G, "REAPORTER_QA")
 local DEMO = QA and QA.demo
 
 if not reaper.ImGui_GetBuiltinPath then
-  reaper.MB("ReaPorter needs the ReaImGui extension (0.9 or newer).\n\n"
+  reaper.MB("ReaPorter needs the ReaImGui extension (0.10 or newer).\n\n"
     .. "Install it from ReaPack (Extensions > ReaPack > Browse packages: ReaImGui), "
     .. "then restart REAPER.", "ReaPorter", 0)
   if reaper.ReaPack_BrowsePackages then reaper.ReaPack_BrowsePackages("ReaImGui") end
