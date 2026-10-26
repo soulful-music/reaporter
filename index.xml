@@ -16,30 +16,6 @@
         <link rel="website" href="https://github.com/soulful-music/reaporter">Repository</link>
         <link rel="website" href="https://github.com/soulful-music/reaporter/issues">Issues</link>
       </metadata>
-      <version name="1.0.0" author="Toms" time="2026-10-26T15:01:44Z">
-        <changelog><![CDATA[First release. Converts the presets of Eventide, LiquidSonics, Relab (LX480 v4),
-Reverb Foundry (Tai Chi), Soundtoys 5 and Valhalla DSP plugins that are already on
-this computer into REAPER user presets, with a backup of every preset file it changes.]]></changelog>
-        <source main="main">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/ReaPorter.lua</source>
-        <source file="reaporter/adapters/eventide.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/eventide.lua</source>
-        <source file="reaporter/adapters/init.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/init.lua</source>
-        <source file="reaporter/adapters/liquidsonics.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/liquidsonics.lua</source>
-        <source file="reaporter/adapters/relab.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/relab.lua</source>
-        <source file="reaporter/adapters/reverb_foundry.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/reverb_foundry.lua</source>
-        <source file="reaporter/adapters/soundtoys.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/soundtoys.lua</source>
-        <source file="reaporter/adapters/valhalla.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/adapters/valhalla.lua</source>
-        <source file="reaporter/codec/json.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/json.lua</source>
-        <source file="reaporter/codec/juce.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/juce.lua</source>
-        <source file="reaporter/codec/xml.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/codec/xml.lua</source>
-        <source file="reaporter/core/convert.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/convert.lua</source>
-        <source file="reaporter/core/ini.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/ini.lua</source>
-        <source file="reaporter/core/pins.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/pins.lua</source>
-        <source file="reaporter/core/plugin_list.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/plugin_list.lua</source>
-        <source file="reaporter/core/scan.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/scan.lua</source>
-        <source file="reaporter/core/sidecar.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/sidecar.lua</source>
-        <source file="reaporter/core/text.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/core/text.lua</source>
-        <source file="reaporter/main.lua">https://github.com/soulful-music/reaporter/raw/21bfda66e3ca62008bc2239cc248bc05acb69d66/FX/reaporter/main.lua</source>
-      </version>
     </reapack>
   </category>
   <metadata>
