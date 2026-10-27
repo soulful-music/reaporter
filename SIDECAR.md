@@ -52,7 +52,8 @@ Omitted when empty: `folder`, `autoTags`, `tags`. Other top-level keys are not k
 ## Folders
 
 The folder is the path of the preset file below the plugin's first preset folder (its factory
-folder). A first level that only holds the library (`Presets`, `Factory Presets`) is dropped.
+folder). A preset from a plugin's preset database or an exported pack is filed under its pack
+instead: `["Essentials"]`. A first level that only holds the library (`Presets`, `Factory Presets`) is dropped.
 A preset under a later folder (the vendor's user-preset folder) is filed under that folder's
 own name: `User Presets/Mine/A` gives `["User Presets", "Mine"]`.
 
@@ -61,8 +62,8 @@ own name: `User Presets/Mine/A` gives `["User Presets", "Mine"]`.
 In this order, repeats dropped ignoring case (the first spelling wins), each cut to 40
 characters, at most 32:
 
-1. the vendor's own category fields, when its format has them (none of the supported vendors'
-   files do);
+1. the vendor's own tags, when its format has them (the tags of Relab LX480 Dual Engine's
+   preset browser);
 2. every folder segment, with leading numbering such as `01 - ` or `03 ` removed;
 3. each vocabulary word found as a whole word in the preset name or a folder segment, after
    splitting camelCase (`SmallRoom` reads as `small room`) and lowercasing.
