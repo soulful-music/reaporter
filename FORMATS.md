@@ -11,6 +11,7 @@ All integers are little-endian unless marked "BE". Offsets are in bytes.
 - [REAPER `vst_chunk` for a VST3](#reaper-vst_chunk-for-a-vst3)
 - [JUCE ValueTree (binary)](#juce-valuetree-binary)
 - [zlib](#zlib)
+- [SQLite](#sqlite)
 - [DMGAudio](#dmgaudio) · [FabFilter](#fabfilter) · [LiquidSonics](#liquidsonics) · [Reverb Foundry](#reverb-foundry) · [Eventide](#eventide) ·
   [Relab](#relab) · [Soundtoys](#soundtoys) · [Valhalla DSP](#valhalla-dsp)
 - [Not covered](#not-covered)
@@ -20,7 +21,10 @@ All integers are little-endian unless marked "BE". Offsets are in bytes.
 REAPER keeps a plugin's user presets in `<resource>/presets/vst3-<name>.ini`, the file
 `TrackFX_GetUserPresetFilename` names. `<name>` is the FX name without the `VST3: ` prefix
 and without its last ` (<vendor>)` group: `VST3: Tai Chi (Reverb Foundry)` uses
-`vst3-Tai Chi.ini`.
+`vst3-Tai Chi.ini`. Not always: REAPER can name the file after the VST3 class or the bundle
+instead, so an adapter sets `ini_name` from a measured `TrackFX_GetUserPresetFilename`.
+`VST3: Relab LX480 Dual Engine Reverb (Relab Development)` (bundle `LX480.vst3`) uses
+`vst3-LX480.ini`, not `vst3-Relab LX480 Dual Engine Reverb.ini`; FabFilter below.
 
 ```
 [General]
@@ -135,6 +139,14 @@ RFC 1950 streams. ReaPorter inflates every block type and writes stored (uncompr
 blocks only: `78 01`, then per block of at most 65535 bytes `u8 final`, `u16 len`,
 `u16 ~len`, the bytes; then the Adler-32 of the data, BE. Every inflater reads them, and
 unlike a compressor's output they are the same bytes on every system.
+
+## SQLite
+
+A preset database is read whole from memory by `codec/sqlite.lua` (sqlite.org/fileformat.html):
+the 100-byte header (page size, reserved bytes, text encoding: UTF-8 only), the schema table
+on page 1, table b-tree pages (interior `0x05`, leaf `0x0D`), overflow chains and the record
+format. Indexes, free pages and the journal are not read; a database in WAL mode is read as
+its main file holds it.
 
 ## DMGAudio
 
@@ -327,6 +339,79 @@ from the host tempo.
 
 ## Relab
 
+### LX480 Dual Engine (4.1)
+
+`VST3: Relab LX480 Dual Engine Reverb (Relab Development)`, bundle `LX480.vst3`. REAPER
+names its preset file `vst3-LX480.ini` (after the bundle, not the FX name). 2 inputs, 2
+outputs.
+
+**Where the presets are.** The plugin's preset browser keeps every pack, factory and user,
+in one SQLite database: `/Users/Shared/Relab Development/LX480/Presets/Presets.lx480`
+(`<shared>/...` on other systems, unverified). Its tables: `preset (id, name, data, creator,
+notes, metadata, version, readonly, ...)`, `pack (id, name, ...)`, `tag (id, name, category,
+...)`, `preset_pack` and `preset_tag` (id pairs). The browser's Export writes a pack to the
+folder `exportDirectory` in `/Library/Application Support/Relab Development/LX480.settings`
+names (the Desktop by default) as an `.lx480pack`: UTF-16 LE JSON with a BOM and CRLF,
+
+```
+{applicationId, databaseVersion: 2, jsonModelVersion: 1,
+ tags: [{id, name, category, colour, readonly}],
+ packs: [{pack: {id, name, creator, notes}, image}],
+ presets: [{preset: {id, name, data, creator, notes, version, metadata},
+            associatedTagIds, associatedPackIds}]}
+```
+
+The preset rows are the same in both: an exported preset's `data` is byte for byte its
+database row. ReaPorter reads the database, then the `.lx480pack` files in the export folder
+(that folder only, not below it); a preset id already read is skipped. A preset is filed
+under its first pack and tagged with its browser tags. The plugin itself moved LX480 v4's
+user presets (`.lx480` in the folder below) into the database's `User` pack.
+
+**A preset's `data`** is JSON: `{version, applicationSettings: {faderMappings: {engine1:
+{fader0category, fader0option, ...}, engine2}}, parameters: [{id, value}], applicationTag:
+"LX480"}`, with one entry per parameter (164) and every value a string in the parameter's
+plain units (`"2.0"`, `"3401.999755859375"`).
+
+**The plugin state** is a plain component: JUCE `copyXmlToBinary` of the plugin's XML, then
+JUCE's empty private data:
+
+```
+"VC2!"  u32 XML length  XML  NUL  16 zero bytes  "JUCEPrivateData"
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?> <LX480 version="4.1.1"><applicationSettings>
+<faderMappings><engine1 fader0category="0" .../><engine2/></faderMappings></applicationSettings>
+<PARAM id="bypass" value="0.0"/> ...         (164, sorted by id)
+<transient currentSlot="0" presetId="..." .../><lockedParameters bypass="0" .../></LX480>
+```
+
+(one line, without the breaks shown). ReaPorter writes the preset's `version`, its fader
+mappings as attributes in the preset's key order, its values unchanged, and a fresh
+instance's `transient` (the browser's GUI state) and `lockedParameters` (all `0`). Nothing in
+the state or REAPER's entry is a checksum; the lengths are REAPER's chunk length, the
+component length and the XML length. Measured in REAPER 7.82 with plugin 4.1.1: every one of
+the browser's presets, built this way and loaded by name from the preset file, gives a state
+whose 164 values equal the preset's, and the parameters REAPER reports, written into a fresh
+instance, give the same 164 values.
+
+The parameters REAPER lists 0 to 163 are the 164 ids in the plugin's own order (the order of
+`lockedParameters`); 164 to 166 are REAPER's Bypass, Wet and Delta. A value maps to the
+normalized one by its parameter's range, measured at 11 points each (value at normalized n;
+a loaded preset reports these n):
+
+| Values | Value at n |
+|---|---|
+| on / off and lists (I/O mode, routing, algorithm, filter types, decay optimization, engine) | the index; index i reports n = i / (count - 1) |
+| gains, RTM, size, shape, spread, width, chorus, diffusion, levels 0..254, ER mix, spin, wander, delay multiplier, feedback, speaker angle, mix, pan, fine delays, tail level, sync rates | linear between the ends |
+| frequencies (HFC, LFC, BXO, rolloffs 120..30600 Hz; HXO 493..21161 Hz) | min + (max - min) (100^n - 1) / 99 |
+| pre-delay, input delay 0..1500 ms, delays 1-6 0..2500 ms | min + (max - min) (11^n - 1) / 10 |
+| twin delays 0..1500 ms | min + (max - min) (80^n - 1) / 79 |
+| bass and high multiply (0.2..4.0, 0.2..1.0) | min + (max - min) (15^n - 1) / 14 |
+| levels in dB (LOS, HIS, LV1-6, shelves, dry levels) | 20 log10(n), -100 at n = 0 |
+
+### LX480 v4
+
 LX480 v4 (`.lx480`) in `/Library/Application Support/Relab Development/LX480/Presets`. Plain
 XML; two layouts:
 
@@ -402,6 +487,7 @@ character references; single quotes around a value that holds a double quote).
 - **Encrypted presets**: LiquidSonics Illusion and Seventh Heaven, Reverb Foundry HD Cart.
   Their plugin state is encrypted too, with a fresh IV per save.
 - **Eventide `.tidex` with non-numeric parameter values** (Physion Mk II, some presets).
-- **Relab LX480 legacy layout**, REV6000 and Sonsig Rev-A (same family, block map not measured).
+- **Relab LX480 v4 legacy layout**, REV6000 and Sonsig Rev-A (same family, block map not
+  measured). LX480 Dual Engine has its own copy of v4's user presets, migrated by the plugin.
 - **LiquidSonics Reverberate `.fxb`** banks: the container is understood, the program layout
   is not.

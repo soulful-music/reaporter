@@ -577,7 +577,7 @@ local function draw_results()
     elseif #r.failed > 0 then
       if ImGui.TreeNode(ctx, head .. "##" .. p.fx_name) then
         for _, f in ipairs(r.failed) do
-          ImGui.TextWrapped(ctx, f[1]:match("([^/\\]+)$") .. ": " .. f[2])
+          ImGui.TextWrapped(ctx, (f.member or f[1]:match("([^/\\]+)$")) .. ": " .. f[2])
         end
         ImGui.TreePop(ctx)
       end

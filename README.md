@@ -65,7 +65,11 @@ can't convert shows 0 new and is not ticked, also when REAPER lists the plugin u
 name and its preset file is only resolved on Convert.
 
 Preset names are the file names. When two files share a name, the folder is added:
-`Big Hall (Vocals)`.
+`Big Hall (Vocals)`. A plugin whose own preset browser keeps a database (Relab LX480 Dual
+Engine) has every preset there converted, named as the browser names it and filed under its
+pack, and the packs exported from that browser are read from the folder the browser exports
+to (the Desktop unless changed in the browser's settings). Put an `.lx480pack` from elsewhere
+there to convert it; a preset the database already has is not added twice.
 
 A plugin that is already open can load the new presets without being reopened: by name, by
 index and with next preset. (Measured with an FX open while its preset file was rewritten
@@ -90,7 +94,7 @@ REAPER's id for it.
 | Eventide | every plugin with a folder in `~/Music/Eventide` (Blackhole, H3000, SP2016, UltraReverb, ...) | `.tide`, `.tidex` |
 | FabFilter | Micro, Pro-C 2, Pro-DS, Pro-G, Pro-L, Pro-L 2, Pro-MB, Pro-Q 2, Pro-Q 3, Pro-Q 4, Pro-R, Pro-R 2, Saturn, Saturn 2, Simplon, Timeless 2, Timeless 3, Twin 2, Twin 3, Volcano 2, Volcano 3 (presets in the plugin's current layout and the older layouts listed in FORMATS.md) | `.ffp` |
 | LiquidSonics | Cinematic Rooms Professional, Lustrous Plates Surround | `.crp_preset`, `.lp_preset` |
-| Relab | LX480 v4 (v4 presets; the legacy layout is listed as failed) | `.lx480` |
+| Relab | LX480 Dual Engine (every pack in its preset browser, and exported packs), LX480 v4 (v4 presets; the legacy layout is listed as failed) | the browser's database, `.lx480pack`, `.lx480` |
 | Reverb Foundry | Tai Chi | `.taichi_preset` |
 | Soundtoys | every Soundtoys 5 plugin with a preset folder | `.toy` |
 | Valhalla DSP | every plugin with a `Presets` folder (VintageVerb, Supermassive, Delay, Plate, ...) | `.vpreset` |
@@ -139,7 +143,10 @@ return M
 Optional: `plugin.pins = { inputs, outputs }`, the plugin's pin counts as REAPER reports
 them on a stereo track (a preset carries them; without them ReaPorter asks REAPER once,
 on Convert), `plugin.skip(path)` to leave files out, `M.tags(bytes)` for the vendor's own
-category fields. Shared codecs live in `codec/` (JUCE ValueTree and VST3 containers, XML,
+category fields, `plugin.ini_name` when REAPER names the preset file after the bundle,
+`plugin.flat` to read only each root's own files, and `plugin.members(path, read)` for a file
+that holds many presets (a database, a pack): it returns `{key, name, folder, tags, bytes}`
+per preset, and `to_state` then gets a member's `bytes`. Shared codecs live in `codec/` (JUCE ValueTree and VST3 containers, XML,
 JSON). An adapter makes no `reaper.*` calls. Add a synthetic fixture to `tests/` (never a
 real vendor file) and a section to FORMATS.md.
 
