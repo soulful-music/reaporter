@@ -34,6 +34,7 @@
 --   [nomain] reaporter/adapters/valhalla.lua
 --   [nomain] reaporter/codec/json.lua
 --   [nomain] reaporter/codec/juce.lua
+--   [nomain] reaporter/codec/sqlite.lua
 --   [nomain] reaporter/codec/xml.lua
 --   [nomain] reaporter/codec/zlib.lua
 --   [nomain] reaporter/core/convert.lua
