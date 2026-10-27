@@ -21,7 +21,10 @@ All integers are little-endian unless marked "BE". Offsets are in bytes.
 REAPER keeps a plugin's user presets in `<resource>/presets/vst3-<name>.ini`, the file
 `TrackFX_GetUserPresetFilename` names. `<name>` is the FX name without the `VST3: ` prefix
 and without its last ` (<vendor>)` group: `VST3: Tai Chi (Reverb Foundry)` uses
-`vst3-Tai Chi.ini`.
+`vst3-Tai Chi.ini`. Not always: REAPER can name the file after the VST3 class or the bundle
+instead, so an adapter sets `ini_name` from a measured `TrackFX_GetUserPresetFilename`.
+`VST3: Relab LX480 Dual Engine Reverb (Relab Development)` (bundle `LX480.vst3`) uses
+`vst3-LX480.ini`, not `vst3-Relab LX480 Dual Engine Reverb.ini`; FabFilter below.
 
 ```
 [General]
