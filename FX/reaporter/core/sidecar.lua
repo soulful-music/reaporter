@@ -254,7 +254,8 @@ end
 -- The sidecar for one preset file and what was done. ini_names: the names the REAPER
 -- file lists; presets: {{name, path}, ...} as the converter names them; existing: the
 -- sidecar now on disk (a decoded table, or nil); source_key: "factory:<key>";
--- vendor_tags(path) -> {tag, ...} when the vendor's files carry category fields.
+-- vendor_tags(path) -> {tag, ...} when the vendor's files carry category fields. A pack
+-- member's entry carries its own folder and tags.
 function M.build(ini_names, presets, roots, existing, source_key, vendor_tags, vocab)
   vocab = vocab or M.load_vocab()
   local out = json.object({ presets = copy(existing and existing.presets) })
@@ -267,8 +268,9 @@ function M.build(ini_names, presets, roots, existing, source_key, vendor_tags, v
   for _, pr in ipairs(presets) do
     local name, path = text.strip(pr[1]), pr[2]
     if listed[name] then
-      local folder = M.folder_of(path, roots)
-      local tags = M.auto_tags(name, folder, vendor_tags and vendor_tags(path) or {}, vocab, canon)
+      local folder = pr.folder or M.folder_of(path, roots)
+      local own = pr.tags or (vendor_tags and vendor_tags(path)) or {}
+      local tags = M.auto_tags(name, folder, own, vocab, canon)
       local record = M.merge_record(out.presets[name], folder, tags, source_key)
       if record == nil then
         stats.user = stats.user + 1

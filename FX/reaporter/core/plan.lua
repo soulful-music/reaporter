@@ -41,7 +41,7 @@ function M.fresh(fs, path, named, known)
   for _, e in ipairs(named) do
     local k = ini.name_key(e[1])
     if not taken[k] then
-      if known and known(e[2]) then
+      if known and known(e[2], e) then
         nknown = nknown + 1
       else
         out[#out + 1] = e

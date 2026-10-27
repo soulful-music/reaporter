@@ -5,6 +5,7 @@ local ini = require("reaporter.core.ini")
 local plugin_list = require("reaporter.core.plugin_list")
 local scan = require("reaporter.core.scan")
 local sidecar = require("reaporter.core.sidecar")
+local text = require("reaporter.core.text")
 
 local M = {}
 
@@ -69,15 +70,42 @@ function M.discover(adapters, env)
   return out
 end
 
+-- A file that holds several presets (a database or a pack) becomes one entry per member:
+-- plugin.members(path, read) -> nil for a file that is one preset, else {{key, name,
+-- folder, tags, bytes}...}. A member's path is "<file>#<key>"; it carries its bytes,
+-- folder and tags on the entry, and a key seen in an earlier file is left out. A file
+-- whose members cannot be read stays one entry, so the conversion reports why.
+local function expand(plugin, paths, read)
+  local out, seen = {}, {}
+  for _, p in ipairs(paths) do
+    local ok, list = pcall(plugin.members, p, read)
+    if not ok or list == nil then
+      out[#out + 1] = p
+    else
+      for _, m in ipairs(list) do
+        if not seen[m.key] then
+          seen[m.key] = true
+          out[#out + 1] = {
+            path = p .. "#" .. m.key, stem = m.name, parent = m.folder[#m.folder] or text.splitext(text.basename(p)),
+            bytes = m.bytes, folder = m.folder, tags = m.tags,
+          }
+        end
+      end
+    end
+  end
+  return out
+end
+
 -- The plugin's presets as named entries: (named {{name, path}...}, unreadable folders).
 function M.presets(plugin, fs)
   local paths, unreadable = scan.files(plugin, fs)
+  if plugin.members then return scan.named(expand(plugin, paths, fs.read)), unreadable end
   return scan.named(paths), unreadable
 end
 
 -- Dry-run counts against the plugin's preset file now on disk (nil when there is none):
 -- {found, new, exist} or {found, error} when the file cannot be merged. known(path) ->
--- reason for a file known not to convert (core/failed.lua): such files are counted in
+-- reason for a file known not to convert (core/failed.lua; it is also given the entry): such files are counted in
 -- `failed`, with reasons[reason] = count, not in `new` (both fields only when there are any).
 function M.dry_run(named, existing, known)
   local counts = { found = #named, new = 0, exist = 0 }
@@ -92,7 +120,7 @@ function M.dry_run(named, existing, known)
   end
   for _, e in ipairs(named) do
     local k = ini.name_key(e[1])
-    local why = not taken[k] and known and known(e[2])
+    local why = not taken[k] and known and known(e[2], e)
     if taken[k] then
       counts.exist = counts.exist + 1
     elseif why then
@@ -113,16 +141,19 @@ function M.new_job(adapter, plugin, named)
 end
 
 -- Convert presets until `more()` returns false or none are left; returns true when done.
--- read(path) -> bytes or nil, reason. A preset that fails is recorded with its reason
+-- read(path) -> bytes or nil, reason; a pack member carries its bytes. A preset that fails is recorded with its reason
 -- (and the file's {size, adler32} when the file itself is why it failed, not REAPER or
--- plugin-list state: failed.environment) and the rest carry on.
+-- plugin-list state: failed.environment) and the rest carry on. A pack member's failure
+-- also carries its preset name (`member`).
 function M.step(job, read, more)
   while job.next <= #job.named do
-    local name, path = job.named[job.next][1], job.named[job.next][2]
+    local e = job.named[job.next]
+    local name, path = e[1], e[2]
     job.next = job.next + 1
-    local bytes, why = read(path)
+    local bytes, why = e.bytes, nil
+    if not bytes then bytes, why = read(path) end
     if not bytes then
-      job.failed[#job.failed + 1] = { path, "unreadable: " .. tostring(why) }
+      job.failed[#job.failed + 1] = { path, "unreadable: " .. tostring(why), member = e.bytes ~= nil and name or nil }
     else
       local ok, chunk = pcall(job.adapter.to_state, bytes, path, job.plugin)
       if ok and type(chunk) == "string" then
@@ -130,7 +161,7 @@ function M.step(job, read, more)
       else
         local content = not ok and not failed.is_environment(chunk)
         job.failed[#job.failed + 1] = { path, ok and "adapter returned no state" or tostring(chunk),
-          content and { failed.fingerprint(bytes) } or nil }
+          content and { failed.fingerprint(bytes) } or nil, member = e.bytes ~= nil and name or nil }
       end
     end
     if more and not more() then break end

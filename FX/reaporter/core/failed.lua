@@ -75,14 +75,14 @@ function M.encode(store)
   return json.encode(json.object({ reaporter = version, failed = failed })) .. "\n"
 end
 
--- known(path) -> the reason the file failed for plugin `fx_name`, or nil when it is not
--- known to fail as it is now. Reads only the files the store names. read(path) -> bytes
--- or nil.
+-- known(path, entry) -> the reason the file failed for plugin `fx_name`, or nil when it is
+-- not known to fail as it is now. Reads only the files the store names; a pack member's
+-- bytes come from its entry. read(path) -> bytes or nil.
 function M.checker(store, read, fx_name)
-  return function(path)
+  return function(path, entry)
     local e = store.files[fx_name] and store.files[fx_name][path]
     if not e then return nil end
-    local bytes = read(path)
+    local bytes = entry and entry.bytes or read(path)
     if not bytes then return nil end
     local size, sum = M.fingerprint(bytes)
     if size == e.size and sum == e.adler32 then return e.reason end

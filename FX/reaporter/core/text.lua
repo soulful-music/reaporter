@@ -138,6 +138,26 @@ function M.parse_float(s)
   return sign == "-" and -v or v
 end
 
+-- UTF-16 LE text (no BOM) as UTF-8. Raises on an odd length or a lone surrogate.
+function M.utf16le_to_utf8(s)
+  if #s % 2 ~= 0 then error("UTF-16: odd byte count", 0) end
+  local out, i, n = {}, 1, #s
+  while i <= n do
+    local u = string.unpack("<I2", s, i)
+    i = i + 2
+    if u >= 0xD800 and u <= 0xDBFF then
+      local lo = i <= n and string.unpack("<I2", s, i)
+      if not lo or lo < 0xDC00 or lo > 0xDFFF then error("UTF-16: lone surrogate", 0) end
+      i = i + 2
+      u = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00)
+    elseif u >= 0xDC00 and u <= 0xDFFF then
+      error("UTF-16: lone surrogate", 0)
+    end
+    out[#out + 1] = utf8.char(u)
+  end
+  return table.concat(out)
+end
+
 -- Split a path at its last separator: (folder, file name).
 function M.split_path(p)
   local d, b = p:match("^(.*)[/\\]([^/\\]*)$")
